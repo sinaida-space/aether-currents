@@ -1,0 +1,360 @@
+/* AETHER CURRENTS — DOS/Tron theme tokens + layout */
+
+:root {
+  --black: #000000;
+  --red: #ff2a2a;
+  --cyan: #00e5ff;
+  --amber: #ffb000;
+  --dim: #5a5a5a;
+  --panel-bg: rgba(0, 0, 0, 0.92);
+  --font-mono: "IBM Plex Mono", "Courier New", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--black);
+  color: var(--amber);
+  font-family: var(--font-mono);
+  overflow: hidden;
+}
+
+body.scroll-ok {
+  overflow: auto;
+}
+
+a {
+  color: var(--cyan);
+}
+
+a:hover,
+a:focus {
+  color: var(--red);
+}
+
+/* ---------- canvases ---------- */
+
+#gl-canvas,
+#hud-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#gl-canvas {
+  z-index: 0;
+}
+
+#hud-canvas {
+  z-index: 1;
+  pointer-events: none;
+}
+
+#cam {
+  visibility: hidden;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+}
+
+/* ---------- welcome overlay ---------- */
+
+#welcome {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  overflow-y: auto;
+  background: var(--black);
+}
+
+#welcome::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 11;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.035) 0px,
+    rgba(255, 255, 255, 0.035) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+.welcome-panel {
+  position: relative;
+  z-index: 12;
+  max-width: 640px;
+  width: 100%;
+  border: 1px solid var(--red);
+  padding: 2rem;
+  background: var(--panel-bg);
+  box-shadow: 0 0 24px rgba(255, 42, 42, 0.25);
+}
+
+.title {
+  font-size: 2rem;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: var(--red);
+  margin: 0 0 0.5rem;
+  text-shadow: 0 0 8px rgba(255, 42, 42, 0.6);
+}
+
+.cursor {
+  display: inline-block;
+  color: var(--red);
+  animation: blink 1s steps(1) infinite;
+}
+
+@keyframes blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.tagline {
+  color: var(--cyan);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  font-size: 0.85rem;
+  margin: 0 0 1.5rem;
+}
+
+h2 {
+  color: var(--cyan);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--dim);
+  padding-bottom: 0.35rem;
+  margin: 1.5rem 0 0.75rem;
+}
+
+.gesture-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  margin-bottom: 0.5rem;
+}
+
+.gesture-table td {
+  padding: 0.2rem 0.4rem;
+  vertical-align: top;
+  color: var(--amber);
+}
+
+.gesture-table td:first-child {
+  color: var(--cyan);
+  white-space: nowrap;
+  padding-right: 1rem;
+}
+
+.notice {
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--dim);
+  border: 1px dashed var(--dim);
+  padding: 0.75rem;
+  margin: 1rem 0;
+}
+
+.legal-links {
+  font-size: 0.78rem;
+  margin: 0.75rem 0;
+}
+
+.legal-links a {
+  margin-right: 1rem;
+}
+
+.credit {
+  font-size: 0.75rem;
+  color: var(--dim);
+  margin-top: 1.5rem;
+}
+
+/* ---------- buttons ---------- */
+
+button,
+.btn {
+  font-family: var(--font-mono);
+  background: transparent;
+  border: 1px solid var(--amber);
+  color: var(--amber);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.15s ease;
+}
+
+button:hover,
+.btn:hover {
+  background: var(--amber);
+  color: var(--black);
+}
+
+button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+button.recommended {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+}
+
+button.recommended:hover {
+  background: var(--cyan);
+  color: var(--black);
+}
+
+.btn-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+#syscheck-status {
+  font-size: 0.78rem;
+  color: var(--cyan);
+  min-height: 1.2em;
+  margin: 0.75rem 0;
+  white-space: pre-wrap;
+}
+
+#syscheck-details {
+  font-size: 0.72rem;
+  color: var(--dim);
+  line-height: 1.5;
+  margin-bottom: 0.5rem;
+}
+
+#mode-select {
+  display: none;
+}
+
+#consent-gate {
+  display: block;
+}
+
+/* ---------- error panel ---------- */
+
+.error-panel {
+  border: 1px solid var(--red);
+  color: var(--red);
+  padding: 1rem;
+  font-size: 0.8rem;
+  margin-top: 1rem;
+}
+
+.error-panel .btn {
+  margin-top: 0.75rem;
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.error-panel .btn:hover {
+  background: var(--red);
+  color: var(--black);
+}
+
+/* ---------- ui bar ---------- */
+
+#ui-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: none;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.85), transparent);
+}
+
+#ui-bar.visible {
+  display: flex;
+}
+
+#hud-status {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 5;
+  color: var(--cyan);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ---------- legal pages ---------- */
+
+body.legal-page {
+  overflow-y: auto;
+  padding: 2rem 1rem;
+}
+
+.legal-doc {
+  max-width: 720px;
+  margin: 0 auto;
+  border: 1px solid var(--dim);
+  padding: 2rem;
+  background: var(--panel-bg);
+}
+
+.legal-doc h1 {
+  color: var(--red);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 1.4rem;
+}
+
+.legal-doc h2 {
+  color: var(--cyan);
+  font-size: 0.85rem;
+}
+
+.legal-doc p,
+.legal-doc li {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--amber);
+}
+
+.legal-doc .back-link {
+  display: inline-block;
+  margin-top: 2rem;
+  font-size: 0.8rem;
+}
+
+.legal-doc code {
+  color: var(--cyan);
+  background: rgba(0, 229, 255, 0.08);
+  padding: 0.1rem 0.3rem;
+}

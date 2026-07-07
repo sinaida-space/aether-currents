@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>AETHER CURRENTS</title>
+<link rel="stylesheet" href="css/main.css" />
+</head>
+<body>
+
+<canvas id="gl-canvas"></canvas>
+<canvas id="hud-canvas"></canvas>
+<video id="cam" playsinline muted></video>
+<div id="hud-status"></div>
+
+<div id="welcome">
+  <div class="welcome-panel">
+    <h1 class="title">AETHER CURRENTS<span class="cursor">▮</span></h1>
+    <p class="tagline">conduct sound with your hands</p>
+
+    <h2>Instructions</h2>
+    <table class="gesture-table">
+      <tr><td>RIGHT HAND X/Y</td><td>playhead position / pitch</td></tr>
+      <tr><td>RIGHT PINCH</td><td>grain size</td></tr>
+      <tr><td>LEFT HAND HEIGHT</td><td>grain density</td></tr>
+      <tr><td>TWO-HAND DISTANCE</td><td>filter + space</td></tr>
+      <tr><td>FIST</td><td>freeze the cloud</td></tr>
+      <tr><td>FAST OPEN PALM</td><td>burst</td></tr>
+    </table>
+
+    <div class="notice">
+      No cookies. No analytics. No server. Your camera is processed entirely
+      on-device and is never uploaded anywhere. localStorage is used only to
+      remember your mode choice and this consent.
+    </div>
+
+    <div class="legal-links">
+      <a href="legal/privacy.html">PRIVACY</a>
+      <a href="legal/terms.html">TERMS</a>
+      <a href="legal/license.html">LICENSE</a>
+    </div>
+
+    <div id="consent-gate">
+      <button id="btn-consent" class="btn">[ OK, UNDERSTOOD ]</button>
+    </div>
+
+    <div id="mode-select">
+      <div id="syscheck-status">SYSTEM CHECK...</div>
+      <div id="syscheck-details"></div>
+      <div class="btn-row">
+        <button id="btn-start-full" class="btn">▸ START — FULL MODE</button>
+        <button id="btn-start-light" class="btn">▸ START — LIGHT MODE</button>
+      </div>
+    </div>
+
+    <div id="camera-error" class="error-panel" style="display:none">
+      <div id="camera-error-text">CAMERA ACCESS DENIED. AETHER CURRENTS needs your camera to track hand gestures.</div>
+      <button id="btn-retry-camera" class="btn">RETRY</button>
+    </div>
+
+    <p class="credit">made by Sinaida — <a href="https://sinaida.eu">sinaida.eu</a></p>
+  </div>
+</div>
+
+<div id="ui-bar">
+  <button id="btn-fullscreen" class="btn">⛶ FULLSCREEN</button>
+  <button id="btn-record" class="btn">● RECORD</button>
+  <button id="btn-samples" class="btn">SAMPLES</button>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AETHER CURRENTS — Privacy</title>
+<link rel="stylesheet" href="../css/main.css" />
+</head>
+<body class="legal-page">
+<div class="legal-doc">
+<h1>Privacy</h1>
+
+<p>AETHER CURRENTS does not use cookies, does not run analytics, and has no accounts. There is no server behind this tool beyond the static files you're reading right now.</p>
+
+<h2>Camera</h2>
+<p>Your camera feed is processed entirely inside your browser, on your device, using the on-device hand-tracking model. Video frames are never transmitted anywhere, never stored, and never leave your machine.</p>
+
+<h2>localStorage</h2>
+<p>Two keys are written to your browser's local storage, and nothing else:</p>
+<ul>
+  <li><code>ac.consent</code> — whether you've acknowledged this notice</li>
+  <li><code>ac.mode</code> — your last chosen mode (FULL or LIGHT)</li>
+</ul>
+<p>Clearing your browser storage removes both. No other data is written.</p>
+
+<h2>Third-party model files</h2>
+<p>The hand-tracking pipeline loads its model files from Google's MediaPipe CDN. That request is a standard file fetch — Google's servers see a normal HTTP request for a static asset, nothing about your session, your camera, or your usage. No video or gesture data is ever sent there.</p>
+
+<h2>Contact</h2>
+<p>Questions: reach out via <a href="https://sinaida.eu">sinaida.eu</a>.</p>
+
+<a class="back-link" href="../index.html">◂ BACK</a>
+</div>
+</body>
+</html>

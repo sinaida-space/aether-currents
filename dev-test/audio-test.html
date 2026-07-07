@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AETHER CURRENTS — audio engine test harness</title>
+<style>
+  :root { color-scheme: dark; }
+  body { background:#0a0a0a; color:#d8d8d8; font:13px/1.5 ui-monospace,Menlo,Consolas,monospace; margin:0; padding:20px; }
+  h1 { color:#ff2a2a; font-size:15px; letter-spacing:2px; }
+  button { background:#151515; color:#eee; border:1px solid #ff2a2a; padding:6px 12px; margin:2px; font:inherit; cursor:pointer; }
+  button:hover { background:#ff2a2a; color:#000; }
+  button:disabled { opacity:.4; cursor:default; }
+  #samples { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:6px; margin:12px 0; }
+  .card { border:1px solid #333; padding:8px; }
+  .rms-ok { color:#4caf50; } .rms-bad { color:#ff2a2a; }
+  #log { white-space:pre-wrap; border:1px solid #333; padding:10px; height:220px; overflow:auto; background:#050505; }
+  #meters { display:flex; gap:24px; margin:10px 0; }
+  .meter { border:1px solid #333; padding:4px 10px; min-width:160px; }
+  .bar { height:8px; background:#ff2a2a; width:0; }
+  .controls { margin:10px 0; }
+</style>
+</head>
+<body>
+<h1>AETHER CURRENTS — AUDIO ENGINE TEST HARNESS (#2)</h1>
+<p>DoD: zero console errors · all 10 RMS &gt; 0.01 · audible output · no zipper on sweeps · getLevel/getCentroid change while playing.</p>
+
+<div class="controls">
+  <button id="btn-init">1 · INIT ENGINE + GENERATE LIBRARY</button>
+</div>
+
+<div id="samples"></div>
+
+<div class="controls">
+  <button id="btn-sweep" disabled>2 · PLAY SELECTED — 10s AUTO SWEEP</button>
+  <button id="btn-freeze" disabled>FREEZE: OFF</button>
+  <button id="btn-burst" disabled>BURST</button>
+  <button id="btn-stop" disabled>STOP</button>
+  <label> reverbMix <input id="rev" type="range" min="0" max="1" step="0.01" value="0.25" disabled></label>
+</div>
+
+<div id="meters">
+  <div class="meter">getLevel() <span id="lvlv">—</span><div class="bar" id="lvlbar"></div></div>
+  <div class="meter">getCentroid() <span id="cenv">—</span><div class="bar" id="cenbar"></div></div>
+</div>
+
+<div id="log"></div>
+
+<script type="module">
+import { GranularEngine, generateLibrary } from '../js/audio/engine.js';
+
+const logEl = document.getElementById('log');
+let errorCount = 0;
+function log(m, cls) { const s = document.createElement('div'); if (cls) s.className = cls; s.textContent = m; logEl.appendChild(s); logEl.scrollTop = logEl.scrollHeight; }
+window.addEventListener('error', (e) => { errorCount++; log('CONSOLE ERROR: ' + e.message, 'rms-bad'); });
+window.addEventListener('unhandledrejection', (e) => { errorCount++; log('PROMISE REJECTION: ' + (e.reason && e.reason.message || e.reason), 'rms-bad'); });
+
+// RMS of an AudioBuffer channel 0.
+function bufRMS(buf) {
+  const d = buf.getChannelData(0);
+  let s = 0; for (let i = 0; i < d.length; i++) s += d[i] * d[i];
+  return Math.sqrt(s / d.length);
+}
+
+let ctx, engine, library = [], selected = null, meterTimer = null, frozen = false;
+
+document.getElementById('btn-init').addEventListener('click', async () => {
+  try {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    await ctx.resume();
+    const t0 = performance.now();
+    engine = await GranularEngine.create(ctx);
+    log('engine created in ' + (performance.now() - t0).toFixed(0) + 'ms');
+
+    const tg = performance.now();
+    library = await generateLibrary(ctx);
+    log('library (' + library.length + ') generated in ' + (performance.now() - tg).toFixed(0) + 'ms');
+
+    const grid = document.getElementById('samples');
+    grid.innerHTML = '';
+    let pass = 0;
+    for (const s of library) {
+      const rms = bufRMS(s.buffer);
+      const ok = rms > 0.01;
+      if (ok) pass++;
+      const card = document.createElement('div');
+      card.className = 'card';
+      const cls = ok ? 'rms-ok' : 'rms-bad';
+      card.innerHTML = `<b>${s.name}</b> <small>[${s.id}]</small><br>` +
+        `dur ${s.buffer.duration.toFixed(2)}s · <span class="${cls}">RMS ${rms.toFixed(4)} ${ok ? 'OK' : 'FAIL'}</span>`;
+      const b = document.createElement('button');
+      b.textContent = 'select';
+      b.addEventListener('click', () => { selected = s; engine.setSample(s.buffer); log('selected ' + s.id); enablePlay(); });
+      card.appendChild(document.createElement('br'));
+      card.appendChild(b);
+      grid.appendChild(card);
+    }
+    log(pass + '/10 samples RMS > 0.01', pass === 10 ? 'rms-ok' : 'rms-bad');
+    if (library[0]) { selected = library[0]; engine.setSample(selected.buffer); }
+    enablePlay();
+    document.getElementById('rev').disabled = false;
+    startMeters();
+  } catch (err) {
+    errorCount++;
+    log('INIT FAILED: ' + err.message, 'rms-bad');
+    console.error(err);
+  }
+});
+
+function enablePlay() {
+  for (const id of ['btn-sweep','btn-freeze','btn-burst','btn-stop']) document.getElementById(id).disabled = false;
+}
+
+function startMeters() {
+  if (meterTimer) return;
+  let lastL = -1, lastC = -1, changedL = false, changedC = false;
+  meterTimer = setInterval(() => {
+    const l = engine.getLevel(), c = engine.getCentroid();
+    document.getElementById('lvlv').textContent = l.toFixed(3);
+    document.getElementById('cenv').textContent = c.toFixed(3);
+    document.getElementById('lvlbar').style.width = (l * 100) + '%';
+    document.getElementById('cenbar').style.width = (c * 100) + '%';
+    if (lastL >= 0 && Math.abs(l - lastL) > 0.0005) changedL = true;
+    if (lastC >= 0 && Math.abs(c - lastC) > 0.0005) changedC = true;
+    lastL = l; lastC = c;
+    window.__metersChanged = { level: changedL, centroid: changedC };
+  }, 100);
+}
+
+document.getElementById('btn-sweep').addEventListener('click', () => {
+  if (!engine || !selected) return;
+  engine.setSample(selected.buffer);
+  const p = engine.node.parameters;
+  const t = ctx.currentTime, T = 10;
+  const pos = p.get('position'), den = p.get('density'), gs = p.get('grainSize');
+  pos.cancelScheduledValues(t); den.cancelScheduledValues(t); gs.cancelScheduledValues(t);
+  // Smooth automation -> perceptual zipper check.
+  pos.setValueAtTime(0, t); pos.linearRampToValueAtTime(1, t + T);
+  den.setValueAtTime(5, t); den.linearRampToValueAtTime(40, t + T);
+  gs.setValueAtTime(0.03, t); gs.linearRampToValueAtTime(0.3, t + T * 0.5); gs.linearRampToValueAtTime(0.05, t + T);
+  log('sweep started (10s): position 0->1, density 5->40, grainSize swept. Listen for clicks/zipper.');
+  setTimeout(() => log('sweep done. metersChanged=' + JSON.stringify(window.__metersChanged)), T * 1000 + 200);
+});
+
+document.getElementById('btn-freeze').addEventListener('click', (e) => {
+  frozen = !frozen; engine.freeze(frozen); e.target.textContent = 'FREEZE: ' + (frozen ? 'ON' : 'OFF');
+  log('freeze ' + frozen);
+});
+document.getElementById('btn-burst').addEventListener('click', () => { engine.burst(); log('burst fired'); });
+document.getElementById('btn-stop').addEventListener('click', () => {
+  const p = engine.node.parameters; const t = ctx.currentTime;
+  p.get('density').cancelScheduledValues(t); p.get('density').setValueAtTime(1, t);
+  p.get('gain').setTargetAtTime(0, t, 0.05);
+  log('stopped (gain->0, density->1)');
+});
+document.getElementById('rev').addEventListener('input', (e) => { engine.reverbMix = parseFloat(e.target.value); });
+
+log('ready. Click INIT to begin. errorCount tracked at top of window.');
+</script>
+</body>
+</html>

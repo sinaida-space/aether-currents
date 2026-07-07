@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>AETHER CURRENTS — tracking DoD harness</title>
+<style>
+  html, body { margin: 0; background: #0a0a0a; color: #d0d0d0; font-family: monospace; }
+  #wrap { display: flex; gap: 16px; padding: 16px; }
+  #stage { position: relative; width: 640px; height: 480px; background: #111; }
+  video { position: absolute; top: 0; left: 0; width: 640px; height: 480px; visibility: hidden; }
+  canvas { position: absolute; top: 0; left: 0; width: 640px; height: 480px; }
+  #panel { flex: 1; min-width: 320px; }
+  #status { white-space: pre-wrap; font-size: 12px; line-height: 1.4; }
+  #json { white-space: pre-wrap; font-size: 11px; background: #111; padding: 8px; border: 1px solid #333; height: 400px; overflow: auto; }
+  .row { margin-bottom: 6px; }
+  .big { font-size: 20px; }
+  button { font-family: monospace; padding: 6px 12px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage">
+    <video id="cam" playsinline muted></video>
+    <canvas id="dbg" width="640" height="480"></canvas>
+  </div>
+  <div id="panel">
+    <div class="row"><button id="btn-start">START</button> <span id="mode-label">mode: full</span></div>
+    <div class="row" id="progress">not started</div>
+    <div class="row big" id="burst">burstCount: 0</div>
+    <div class="row" id="fps">trackingFps: -- / renderFps: --</div>
+    <div class="row" id="stale">stale: --</div>
+    <div id="json">{}</div>
+  </div>
+</div>
+
+<script type="module">
+import { HandTracker } from '../js/tracking/tracker.js';
+
+const video = document.getElementById('cam');
+const canvas = document.getElementById('dbg');
+const ctx = canvas.getContext('2d');
+const btnStart = document.getElementById('btn-start');
+const progressEl = document.getElementById('progress');
+const burstEl = document.getElementById('burst');
+const fpsEl = document.getElementById('fps');
+const staleEl = document.getElementById('stale');
+const jsonEl = document.getElementById('json');
+const modeLabel = document.getElementById('mode-label');
+
+const params = new URLSearchParams(location.search);
+const mode = params.get('mode') === 'light' ? 'light' : 'full';
+modeLabel.textContent = `mode: ${mode}`;
+
+let tracker = null;
+let renderTimes = [];
+
+function drawLandmarks(state) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (const side of ['left', 'right']) {
+    const hand = state.hands[side];
+    if (!hand) continue;
+    ctx.fillStyle = side === 'right' ? '#ff3b3b' : '#3bafff';
+    const lm = hand.landmarks;
+    for (let i = 0; i < 21; i++) {
+      const x = lm[i * 3] * canvas.width;
+      const y = lm[i * 3 + 1] * canvas.height;
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#fff';
+    ctx.font = '12px monospace';
+    ctx.fillText(side, hand.x * canvas.width, hand.y * canvas.height - 10);
+  }
+}
+
+function renderLoop() {
+  const now = performance.now();
+  renderTimes.push(now);
+  if (renderTimes.length > 60) renderTimes.shift();
+
+  if (tracker) {
+    const state = tracker.getState();
+    drawLandmarks(state);
+
+    staleEl.textContent = `stale: ${state.stale}`;
+    burstEl.textContent = `burstCount: ${state.gestures.burstCount}`;
+
+    let renderFps = 0;
+    if (renderTimes.length > 1) {
+      const span = (renderTimes[renderTimes.length - 1] - renderTimes[0]) / 1000;
+      renderFps = span > 0 ? (renderTimes.length - 1) / span : 0;
+    }
+    fpsEl.textContent = `trackingFps: ${tracker.trackingFps.toFixed(1)} / renderFps: ${renderFps.toFixed(1)}`;
+
+    jsonEl.textContent = JSON.stringify(
+      {
+        t: state.t,
+        stale: state.stale,
+        gestures: state.gestures,
+        hands: {
+          left: state.hands.left && {
+            x: state.hands.left.x,
+            y: state.hands.left.y,
+            fist: state.hands.left.fist,
+            palmOpen: state.hands.left.palmOpen,
+            pinch: state.hands.left.pinch,
+          },
+          right: state.hands.right && {
+            x: state.hands.right.x,
+            y: state.hands.right.y,
+            fist: state.hands.right.fist,
+            palmOpen: state.hands.right.palmOpen,
+            pinch: state.hands.right.pinch,
+          },
+        },
+      },
+      null,
+      2
+    );
+  }
+
+  requestAnimationFrame(renderLoop);
+}
+
+btnStart.addEventListener('click', async () => {
+  btnStart.disabled = true;
+  progressEl.textContent = 'requesting camera…';
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: mode === 'light' ? { width: 640, height: 480 } : { width: 1280, height: 720 },
+    });
+    video.srcObject = stream;
+    await video.play().catch(() => {});
+  } catch (err) {
+    progressEl.textContent = `camera error: ${err.message}`;
+    btnStart.disabled = false;
+    return;
+  }
+
+  progressEl.textContent = 'loading model… 0%';
+  try {
+    tracker = await HandTracker.create({
+      video,
+      mode,
+      onProgress: (p) => {
+        progressEl.textContent = `loading model… ${Math.round(p * 100)}%`;
+      },
+    });
+  } catch (err) {
+    progressEl.textContent = `init error: ${err.message}`;
+    console.error(err);
+    btnStart.disabled = false;
+    return;
+  }
+
+  progressEl.textContent = 'tracking live';
+  tracker.start();
+});
+
+requestAnimationFrame(renderLoop);
+</script>
+</body>
+</html>

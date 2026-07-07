@@ -55,7 +55,7 @@ export class Hud {
     const pad = Math.round(18 * dpr);
 
     ctx.textBaseline = 'top';
-    ctx.font = `${fontPx}px "Courier New", monospace`;
+    ctx.font = `${fontPx}px "VT323", "Courier New", monospace`;
     ctx.shadowBlur = 8 * dpr;
 
     let y = pad;
@@ -90,13 +90,13 @@ export class Hud {
     if (s.stale && blinkOn) {
       const banner = 'SIGNAL LOST — SHOW YOUR HANDS';
       const bf = Math.max(16, Math.round(20 * dpr));
-      ctx.font = `${bf}px "Courier New", monospace`;
+      ctx.font = `${bf}px "VT323", "Courier New", monospace`;
       ctx.textAlign = 'center';
       ctx.fillStyle = CYAN;
       ctx.shadowColor = CYAN;
       ctx.fillText(banner, W / 2, H / 2 - bf);
       ctx.textAlign = 'left';
-      ctx.font = `${fontPx}px "Courier New", monospace`;
+      ctx.font = `${fontPx}px "VT323", "Courier New", monospace`;
     }
 
     // bottom-right watermark

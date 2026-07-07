@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>AETHER CURRENTS — visuals test</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  #gl-canvas, #hud-canvas {
+    position: fixed; inset: 0; width: 100vw; height: 100vh; display: block;
+  }
+  #hud-canvas { pointer-events: none; }
+  #panel {
+    position: fixed; top: 10px; right: 10px; z-index: 10;
+    font: 12px "Courier New", monospace; color: #ffb000;
+    background: rgba(0,0,0,0.5); padding: 8px 10px; border: 1px solid #ffb00055;
+  }
+  #panel button {
+    font: inherit; color: #ffb000; background: #1a1200;
+    border: 1px solid #ffb000; padding: 3px 8px; margin-right: 6px; cursor: pointer;
+  }
+  #panel button.on { background: #ffb000; color: #000; }
+  #fps { color: #00e5ff; }
+</style>
+</head>
+<body>
+<canvas id="gl-canvas"></canvas>
+<canvas id="hud-canvas"></canvas>
+
+<div id="panel">
+  <button id="btn-full" class="on">FULL</button>
+  <button id="btn-light">LIGHT</button>
+  <div id="fps">fps: —</div>
+</div>
+
+<script type="module">
+import { Renderer } from '../js/visuals/renderer.js';
+
+const glCanvas = document.getElementById('gl-canvas');
+const hudCanvas = document.getElementById('hud-canvas');
+const fpsEl = document.getElementById('fps');
+const btnFull = document.getElementById('btn-full');
+const btnLight = document.getElementById('btn-light');
+
+let renderer = null;
+let mode = 'full';
+
+function build(m) {
+  mode = m;
+  renderer = new Renderer(glCanvas, hudCanvas, { mode: m });
+  renderer.resize();
+  btnFull.classList.toggle('on', m === 'full');
+  btnLight.classList.toggle('on', m === 'light');
+}
+btnFull.onclick = () => build('full');
+btnLight.onclick = () => build('light');
+window.addEventListener('resize', () => renderer && renderer.resize());
+
+// ---- synthetic hand ------------------------------------------------------
+// 21 MediaPipe-style landmarks: wrist + 5 fingers radiating outward.
+const FINGER_DIRS = [-0.9, -0.45, 0.0, 0.45, 0.9]; // radians offset from "up"
+function writeHand(out, cx, cy, spread, phase) {
+  // wrist
+  out[0] = cx; out[1] = cy; out[2] = 0;
+  let k = 1;
+  for (let f = 0; f < 5; f++) {
+    const ang = -Math.PI / 2 + FINGER_DIRS[f];
+    for (let j = 0; j < 4; j++) {
+      const r = spread * (0.35 + j * 0.22) * (1 + 0.08 * Math.sin(phase + f + j));
+      out[k * 3 + 0] = cx + Math.cos(ang) * r;
+      out[k * 3 + 1] = cy + Math.sin(ang) * r;
+      out[k * 3 + 2] = 0;
+      k++;
+    }
+  }
+  return out;
+}
+
+const lmL = new Float32Array(63);
+const lmR = new Float32Array(63);
+let prevL = { x: 0.3, y: 0.5 };
+let prevR = { x: 0.7, y: 0.5 };
+
+let last = performance.now();
+let t = 0;
+let burstCount = 0;
+let nextBurst = 3;
+
+function synthState(dt) {
+  t += dt;
+
+  // lissajous hand centres (0..1, top-left origin)
+  const lx = 0.30 + 0.18 * Math.sin(t * 0.7);
+  const ly = 0.50 + 0.20 * Math.sin(t * 1.1 + 1.0);
+  const rx = 0.70 + 0.18 * Math.sin(t * 0.9 + 2.0);
+  const ry = 0.50 + 0.20 * Math.sin(t * 1.3);
+
+  // scripted gesture cycles
+  const fistL = 0.5 + 0.5 * Math.sin(t * 0.5);
+  const palmR = 0.5 + 0.5 * Math.sin(t * 0.4 + 2.0);
+  const pinchR = 0.5 + 0.5 * Math.sin(t * 0.8);
+
+  // hands null out (SIGNAL LOST) for ~2.5s every ~14s
+  const cycle = t % 14;
+  const handsGone = cycle > 11.5;
+
+  // burst every 3s
+  if (t > nextBurst) { burstCount++; nextBurst += 3; }
+
+  // freeze toggles every 8s
+  const frozen = Math.floor(t / 8) % 2 === 1;
+
+  // audio
+  const level = Math.abs(Math.sin(t * 1.7));
+  const centroid = (Math.sin(t * 0.25) * 0.5 + 0.5); // slow sweep 0..1
+
+  writeHand(lmL, lx, ly, 0.16 * (1 - fistL * 0.4), t * 3);
+  writeHand(lmR, rx, ry, 0.16 * (1 + palmR * 0.4), t * 3 + 1);
+
+  const velL = { x: (lx - prevL.x) / dt, y: (ly - prevL.y) / dt };
+  const velR = { x: (rx - prevR.x) / dt, y: (ry - prevR.y) / dt };
+  prevL = { x: lx, y: ly }; prevR = { x: rx, y: ry };
+
+  const hands = handsGone ? { left: null, right: null } : {
+    left:  { x: lx, y: ly, pinch: 0, fist: fistL, palmOpen: 0, velocity: velL, landmarks: lmL },
+    right: { x: rx, y: ry, pinch: pinchR, fist: 0, palmOpen: palmR, velocity: velR, landmarks: lmR },
+  };
+
+  return {
+    hands,
+    audio: { level, centroid },
+    params: {
+      position: 0.5 + 0.5 * Math.sin(t * 0.3),
+      pitch: 1.0 + 0.5 * Math.sin(t * 0.6),
+      grainSize: 0.05 + 0.04 * (0.5 + 0.5 * Math.sin(t * 0.9)),
+      density: Math.round(12 + 12 * (0.5 + 0.5 * Math.sin(t * 0.5))),
+      filterCutoff: 0.5, space: 0.5 + 0.5 * Math.sin(t * 0.2),
+    },
+    frozen,
+    burstCount,
+    modeLabel: mode === 'light' ? 'LIGHT MODE' : 'FULL MODE',
+    sampleName: 'GHOST CHOIR',
+    recording: (t % 10) > 5,
+    trackingFps: handsGone ? 0 : 28,
+    stale: handsGone,
+  };
+}
+
+function loop(now) {
+  const dt = Math.min((now - last) / 1000, 0.05);
+  last = now;
+  if (renderer) {
+    renderer.frame(dt, synthState(dt));
+    fpsEl.textContent = 'fps: ' + renderer.fps.toFixed(0) + '  (' + mode + ')';
+  }
+  requestAnimationFrame(loop);
+}
+
+build('full');
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

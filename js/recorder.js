@@ -233,7 +233,28 @@ export class Recorder {
 
   async start() {
     if (this.recording) return;
+    try {
+      await this._start();
+    } catch (err) {
+      // Roll back partial setup so a failed start never leaks connections
+      // or leaves the recorder wedged in a not-quite-recording state.
+      this._teardownOnError();
+      throw err;
+    }
+  }
 
+  _teardownOnError() {
+    try { if (this._mediaRecorder && this._mediaRecorder.state !== 'inactive') this._mediaRecorder.stop(); } catch (e) { /* already dead */ }
+    this._mediaRecorder = null;
+    try { if (this._destNode) this.audioNode.disconnect(this._destNode); } catch (e) { /* not connected */ }
+    this._destNode = null;
+    try { if (this._pcmNode) { this.audioNode.disconnect(this._pcmNode); this._pcmNode.port.onmessage = null; } } catch (e) { /* not connected */ }
+    this._pcmNode = null;
+    if (this._stopTimer) { clearTimeout(this._stopTimer); this._stopTimer = null; }
+    this.recording = false;
+  }
+
+  async _start() {
     await document.fonts.load('16px VT323');
 
     const light = this.modeLabel === 'LIGHT MODE';

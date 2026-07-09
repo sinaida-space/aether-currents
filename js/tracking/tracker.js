@@ -168,6 +168,31 @@ function clamp01(v) {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
+async function fetchWithProgress(url, onProgress) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`fetch failed for ${url}: ${res.status}`);
+  const total = Number(res.headers.get('content-length')) || 0;
+  if (!res.body || !total) {
+    const buf = await res.arrayBuffer();
+    onProgress(1);
+    return buf;
+  }
+  const reader = res.body.getReader();
+  const chunks = [];
+  let received = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    onProgress(received / total);
+  }
+  const buf = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) { buf.set(chunk, offset); offset += chunk.length; }
+  return buf.buffer;
+}
+
 // ---- HandTracker ----------------------------------------------------
 
 export class HandTracker {
@@ -180,7 +205,7 @@ export class HandTracker {
   constructor(video, mode) {
     this.video = video;
     this.mode = mode === 'light' ? 'light' : 'full';
-    this.worker = null;
+    this.landmarker = null;
     this._running = false;
     this._busy = false;
     this._frameId = 0;
@@ -197,40 +222,42 @@ export class HandTracker {
     this._resultTimes = []; // rolling window for trackingFps
   }
 
+  // MediaPipe runs on the main thread: tasks-vision's wasm loader calls
+  // importScripts(), which module workers forbid, and the package ships no
+  // classic-worker build. Decoupling survives via pacing: inference is
+  // capped at sendHz, frames are dropped (never queued), and the render
+  // loop never awaits detection.
   async _init(onProgress) {
-    this.worker = new Worker(new URL('./vision-worker.js', import.meta.url), { type: 'module' });
+    const report = (p) => { if (onProgress) onProgress(p); };
+    report(0);
+    const { HandLandmarker, FilesetResolver } = await import(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs'
+    );
+    const vision = await FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
+    );
+    report(0.6);
 
-    await new Promise((resolve, reject) => {
-      const onMessage = (ev) => {
-        const msg = ev.data;
-        if (msg.type === 'progress') {
-          if (onProgress) onProgress(msg.value);
-        } else if (msg.type === 'ready') {
-          this.worker.removeEventListener('message', onMessage);
-          resolve();
-        } else if (msg.type === 'error') {
-          this.worker.removeEventListener('message', onMessage);
-          reject(new Error(msg.message));
-        }
-      };
-      this.worker.addEventListener('message', onMessage);
-      this.worker.postMessage({ type: 'init', mode: this.mode });
-    });
+    const modelAssetBuffer = await fetchWithProgress(
+      'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task',
+      (p) => report(0.6 + p * 0.35)
+    );
 
-    // Steady-state listener (after init handshake resolved).
-    this.worker.addEventListener('message', (ev) => this._onWorkerMessage(ev.data));
-  }
-
-  _onWorkerMessage(msg) {
-    if (msg.type === 'result') {
-      this._busy = false;
-      this._ingestResult(msg);
-    } else if (msg.type === 'error') {
-      this._busy = false;
-      // Non-fatal per-frame error — drop this frame, keep pumping.
-      // eslint-disable-next-line no-console
-      console.error('[HandTracker] worker error:', msg.message);
+    const baseOptions = {
+      modelAssetBuffer: new Uint8Array(modelAssetBuffer),
+      delegate: 'GPU',
+    };
+    try {
+      this.landmarker = await HandLandmarker.createFromOptions(vision, {
+        baseOptions, runningMode: 'VIDEO', numHands: 2,
+      });
+    } catch (err) {
+      this.landmarker = await HandLandmarker.createFromOptions(vision, {
+        baseOptions: { ...baseOptions, delegate: 'CPU' },
+        runningMode: 'VIDEO', numHands: 2,
+      });
     }
+    report(1);
   }
 
   start() {
@@ -249,7 +276,6 @@ export class HandTracker {
       }
       this._pumpHandle = null;
     }
-    if (this.worker) this.worker.postMessage({ type: 'stop' });
   }
 
   get trackingFps() {
@@ -286,25 +312,36 @@ export class HandTracker {
       return;
     }
 
-    const aspect = video.videoHeight / video.videoWidth;
-    const resizeWidth = cfg.resizeWidth;
-    const resizeHeight = Math.round(resizeWidth * aspect);
-
     this._lastSendT = now;
     this._busy = true;
     try {
-      const bitmap = await createImageBitmap(video, {
-        resizeWidth,
-        resizeHeight,
-        resizeQuality: 'low',
-      });
-      const id = ++this._frameId;
-      this.worker.postMessage({ type: 'frame', bitmap, id, sentAt: now }, [bitmap]);
+      const ts = performance.now();
+      const result = this.landmarker.detectForVideo(video, ts);
+      const hands = [];
+      const landmarksList = result.landmarks || [];
+      const handednessList = result.handedness || [];
+      for (let i = 0; i < landmarksList.length; i++) {
+        const lm = landmarksList[i];
+        const flat = new Float32Array(lm.length * 3);
+        for (let j = 0; j < lm.length; j++) {
+          flat[j * 3] = lm[j].x;
+          flat[j * 3 + 1] = lm[j].y;
+          flat[j * 3 + 2] = lm[j].z;
+        }
+        const cat = handednessList[i] && handednessList[i][0];
+        hands.push({
+          label: cat ? cat.categoryName : null, // raw MediaPipe label, unmirrored frame
+          score: cat ? cat.score : 0,
+          landmarks: flat,
+        });
+      }
+      this._ingestResult({ t: ts, hands });
     } catch (err) {
-      this._busy = false;
+      // Non-fatal per-frame error — drop this frame, keep pumping.
       // eslint-disable-next-line no-console
-      console.error('[HandTracker] createImageBitmap failed:', err);
+      console.error('[HandTracker] detect failed:', err);
     }
+    this._busy = false;
 
     this._scheduleNext();
   }

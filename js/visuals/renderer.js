@@ -76,8 +76,8 @@ export class Renderer {
       sim: this._locs(this.pSim, ['uState', 'uTexSize', 'uTime', 'uDt', 'uHandPresent',
         'uAttract', 'uRadius', 'uDamping', 'uDrift', 'uLandmarks', 'uHandVelL', 'uHandVelR',
         'uMomentum', 'uBurst']),
-      particle: this._locs(this.pParticle, ['uState', 'uTexSize', 'uAspect', 'uPointScale']),
-      feedback: this._locs(this.pFeedback, ['uScene', 'uPrev', 'uDecay', 'uRot', 'uZoom']),
+      particle: this._locs(this.pParticle, ['uState', 'uTexSize', 'uAspect', 'uPointScale', 'uHandPresent']),
+      feedback: this._locs(this.pFeedback, ['uScene', 'uPrev', 'uDecay', 'uRot', 'uZoom', 'uInput']),
       threshold: this._locs(this.pThreshold, ['uTex', 'uThresh']),
       blur: this._locs(this.pBlur, ['uTex', 'uDir']),
       grade: this._locs(this.pGrade, ['uFeedback', 'uBloom', 'uTime', 'uCentroid', 'uLevel',
@@ -285,7 +285,7 @@ export class Renderer {
 
     // spring / radius / damping shaped by fist (tighten) and palmOpen (relax)
     const attractOf = (g) => 6.0 * (1.0 + g.fist * 1.6) * (1.0 - g.palm * 0.4);
-    const radiusOf = (g) => 0.06 * (1.0 - g.fist * 0.6) * (1.0 + g.palm * 1.4);
+    const radiusOf = (g) => 0.022 * (1.0 - g.fist * 0.6) * (1.0 + g.palm * 1.8);
     this._attract[0] = attractOf(gl_); this._attract[1] = attractOf(gr_);
     this._radius[0] = radiusOf(gl_); this._radius[1] = radiusOf(gr_);
 
@@ -298,7 +298,7 @@ export class Renderer {
     const audio = (state && state.audio) || { level: 0, centroid: 0 };
     const space = (state && state.params && state.params.space != null) ? state.params.space : 0;
     this._decay = frozen ? 0.965
-      : Math.min(0.965, 0.90 + space * 0.06 + (audio.level || 0) * 0.02);
+      : Math.min(0.955, 0.86 + space * 0.08 + (audio.level || 0) * 0.02);
     this._rot = frozen ? 0.0002 : 0.002;
     this._zoom = frozen ? 1.0 : 1.003;
 
@@ -338,7 +338,7 @@ export class Renderer {
       this._burstTimer = Math.max(0, this._burstTimer - dt);
       const k = this._burstTimer / 0.4;
       this._burst[0] = this._burstOX; this._burst[1] = this._burstOY;
-      this._burst[2] = 9.0 * k;
+      this._burst[2] = 4.5 * k;
       this._burstFlash = k;
     } else {
       this._burst[0] = this._burst[1] = this._burst[2] = 0;
@@ -386,8 +386,9 @@ export class Renderer {
     gl.uniform1i(up.uState, 0);
     gl.uniform1i(up.uTexSize, this.simSize);
     gl.uniform1f(up.uAspect, this.aspect);
-    const pscale = (3.0 + this._grainSize * 10.0) * (this.rh / 900);
+    const pscale = (2.0 + this._grainSize * 7.0) * (this.rh / 900);
     gl.uniform1f(up.uPointScale, pscale);
+    gl.uniform2fv(up.uHandPresent, this._handPresent);
     gl.drawArrays(gl.POINTS, 0, this.particleCount);
     gl.disable(gl.BLEND);
 
@@ -406,6 +407,9 @@ export class Renderer {
     gl.uniform1f(uf.uDecay, this._decay);
     gl.uniform1f(uf.uRot, this._rot);
     gl.uniform1f(uf.uZoom, this._zoom);
+    // Bound the feedback steady state: at max decay 0.965 the closed-loop
+    // gain is uInput/(1-decay) ~= 0.14/0.035 ~= 4x, tamed by the grade tonemap.
+    gl.uniform1f(uf.uInput, 0.14);
     this._fullscreenDraw();
     this.fbIndex = fbDst;
     const feedbackCur = this.fbTex[this.fbIndex];

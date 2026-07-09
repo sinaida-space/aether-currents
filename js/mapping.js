@@ -97,10 +97,13 @@ export class Mapper {
     }
 
     // --- position (right.x) + pitch (right.y, exponential) ---
-    if (hands.right && !this._frozen) {
-      const position = Math.max(0, Math.min(1, hands.right.x));
-      this._setParam('position', 'position', position);
-
+    // Freeze holds only the playhead position; pitch stays live so the
+    // frozen cloud can still be bent (engine contract, issue #2).
+    if (hands.right) {
+      if (!this._frozen) {
+        const position = Math.max(0, Math.min(1, hands.right.x));
+        this._setParam('position', 'position', position);
+      }
       const y = Math.max(0, Math.min(1, hands.right.y));
       const pitch = Math.pow(2, 1 - 2 * y); // top(y=0)->2.0, mid(y=.5)->1.0, bottom(y=1)->0.5
       this._setParam('pitch', 'pitch', pitch);

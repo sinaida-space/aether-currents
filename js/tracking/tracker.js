@@ -239,7 +239,7 @@ export class HandTracker {
     report(0.6);
 
     const modelAssetBuffer = await fetchWithProgress(
-      'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task',
+      'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
       (p) => report(0.6 + p * 0.35)
     );
 

@@ -6,6 +6,15 @@ const AMBER = '#ffb000';
 const RED = '#ff2a2a';
 const CYAN = '#00e5ff';
 const DIM = 'rgba(255,176,0,0.35)';
+const GESTURE_NORMAL = 'rgba(255,176,0,0.55)';
+const GESTURE_DIMMED = 'rgba(255,176,0,0.22)';
+const GESTURE_DIM_AFTER_MS = 60000;
+const GESTURE_LINE_WIDE =
+  'R-HAND XY:POS/PITCH · PINCH:GRAIN · L-HAND Y:DENSITY · HANDS APART:FILTER+SPACE · FIST:FREEZE · FLICK OPEN:BURST';
+const GESTURE_LINES_NARROW = [
+  'R-HAND XY:POS/PITCH · PINCH:GRAIN · L-HAND Y:DENSITY',
+  'HANDS APART:FILTER+SPACE · FIST:FREEZE · FLICK OPEN:BURST',
+];
 
 function fmt2(x) {
   // 0.42 -> ".42", -0.4 -> "-.40"
@@ -24,6 +33,7 @@ export class Hud {
     this.ctx = canvas.getContext('2d');
     this.dpr = 1;
     this.lastDraw = -1e9;
+    this._trackedSince = null;
     this.resize();
   }
 
@@ -99,12 +109,44 @@ export class Hud {
       ctx.font = `${fontPx}px "VT323", "Courier New", monospace`;
     }
 
+    // reserve clearance so the fixed bottom ui-bar never overlaps our text
+    const uiClearance = Math.round(58 * dpr);
+    const bottomLine = H - uiClearance;
+
     // bottom-right watermark
     ctx.textAlign = 'right';
     ctx.fillStyle = DIM;
     ctx.shadowColor = AMBER;
     ctx.shadowBlur = 4 * dpr;
-    ctx.fillText('sinaida.eu', W - pad, H - pad - fontPx);
+    ctx.fillText('sinaida.eu', W - pad, bottomLine - fontPx);
+    ctx.textAlign = 'left';
+
+    // bottom-center MS-DOS style gesture instruction line(s), above the watermark
+    if (!s.stale) {
+      if (this._trackedSince == null) this._trackedSince = now;
+    } else {
+      this._trackedSince = null;
+    }
+    const trackedMs = this._trackedSince != null ? now - this._trackedSince : 0;
+    const dimGesture = trackedMs > GESTURE_DIM_AFTER_MS;
+
+    const cssW = this.canvas.clientWidth || (W / dpr);
+    const narrow = cssW < 900;
+    const gLines = narrow ? GESTURE_LINES_NARROW.slice() : [GESTURE_LINE_WIDE];
+    gLines[gLines.length - 1] += blinkOn ? ' ▮' : ' ';
+
+    const gFontPx = Math.max(11, Math.round(13 * dpr));
+    const gLh = Math.round(gFontPx * 1.35);
+    ctx.font = `${gFontPx}px "VT323", "Courier New", monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = dimGesture ? GESTURE_DIMMED : GESTURE_NORMAL;
+    ctx.shadowColor = AMBER;
+    ctx.shadowBlur = 4 * dpr;
+    let gy = bottomLine - fontPx - Math.round(6 * dpr) - gLh * gLines.length;
+    for (const text of gLines) {
+      ctx.fillText(text, W / 2, gy);
+      gy += gLh;
+    }
     ctx.textAlign = 'left';
     ctx.shadowBlur = 0;
   }

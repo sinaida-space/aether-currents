@@ -149,6 +149,9 @@ const glCanvas = document.getElementById('gl-canvas');
 const hudCanvas = document.getElementById('hud-canvas');
 const btnRecord = document.getElementById('btn-record');
 const btnSamples = document.getElementById('btn-samples');
+const btnBg = document.getElementById('btn-bg');
+
+const BG_KEY = 'ac.bg';
 
 const sampleMenu = document.getElementById('sample-menu');
 const sampleList = document.getElementById('sample-list');
@@ -200,7 +203,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode) {
 
     // Renderer construction is synchronous WebGL setup — runs immediately,
     // alongside the async engine/library/tracker work above.
-    renderer = new Renderer(glCanvas, hudCanvas, { mode });
+    renderer = new Renderer(glCanvas, hudCanvas, { mode, video: camVideo });
 
     [engine, library, tracker] = await Promise.all([enginePromise, libraryPromise, trackerPromise]);
   } catch (err) {
@@ -227,6 +230,22 @@ window.__AC_BOOT = async function __AC_BOOT(mode) {
   mapper.start();
 
   window.addEventListener('resize', () => renderer.resize());
+
+  // ---- VHS webcam background toggle --------------------------------------
+
+  const bgLabel = (m) => (m === 'CAM' ? 'BG: CAM' : 'BG: VOID');
+  let bgMode = localStorage.getItem(BG_KEY) === 'CAM' ? 'CAM' : 'VOID';
+  btnBg.textContent = bgLabel(bgMode);
+  renderer.setCamOn(bgMode === 'CAM');
+
+  function setBgMode(next) {
+    bgMode = next;
+    localStorage.setItem(BG_KEY, bgMode);
+    btnBg.textContent = bgLabel(bgMode);
+    renderer.setCamOn(bgMode === 'CAM');
+  }
+
+  btnBg.addEventListener('click', () => setBgMode(bgMode === 'CAM' ? 'VOID' : 'CAM'));
 
   // ---- sample menu ------------------------------------------------------
 
@@ -321,6 +340,10 @@ window.__AC_BOOT = async function __AC_BOOT(mode) {
     if (/^[0-9]$/.test(e.key)) {
       const i = Number(e.key);
       if (library[i]) selectSample(i);
+      return;
+    }
+    if (e.key === 'v' || e.key === 'V') {
+      setBgMode(bgMode === 'CAM' ? 'VOID' : 'CAM');
     }
   });
 

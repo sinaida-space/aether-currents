@@ -12,9 +12,12 @@ const CONSENT_KEY = 'ac.consent';
 const MODE_KEY = 'ac.mode';
 
 const welcome = document.getElementById('welcome');
-const consentGate = document.getElementById('consent-gate');
 const modeSelect = document.getElementById('mode-select');
-const btnConsent = document.getElementById('btn-consent');
+const boot = document.getElementById('boot');
+const bootLinesEl = document.getElementById('boot-lines');
+const bootGdpr = document.getElementById('boot-gdpr');
+const btnBootAccept = document.getElementById('btn-boot-accept');
+const asciiGlyphs = document.getElementById('ascii-glyphs');
 const btnStartFull = document.getElementById('btn-start-full');
 const btnStartLight = document.getElementById('btn-start-light');
 const syscheckStatus = document.getElementById('syscheck-status');
@@ -52,7 +55,6 @@ function formatDetails(details) {
 }
 
 async function runProbeAndShowModes() {
-  consentGate.style.display = 'none';
   modeSelect.style.display = 'block';
   syscheckStatus.textContent = 'SYSTEM CHECK...';
   syscheckDetails.textContent = '';
@@ -76,14 +78,157 @@ async function runProbeAndShowModes() {
   }
 }
 
-btnConsent.addEventListener('click', () => {
-  setConsent();
+// ---------------------------------------------------------------------------
+// Screen 1 — BIOS/POST boot sequence + GDPR consent.
+// Returning visitors (ac.consent already set) skip straight to Screen 2.
+// ---------------------------------------------------------------------------
+
+const BOOT_LINES = [
+  { text: 'AETHER BIOS v1.2 — (C) SINAIDA SYSTEMS' },
+  { memory: true },
+  { text: 'AETHER SOUND DRIVER ........ OK' },
+  { text: 'HAND TRACKING MODULE ....... OK' },
+  { text: 'GRANULAR ENGINE ............ OK' },
+  { text: 'VIDEO: VHS COMPOSITE ....... OK' },
+  { text: '' },
+  { text: 'AETHER CURRENTS — conduct sound with your hands.' },
+  { text: 'made by Sinaida — sinaida.eu' },
+];
+const MEMORY_TARGET_KB = 65536;
+
+let typingDone = false;
+let skipRequested = false;
+let bootLines = [];
+
+function renderBootLines() {
+  bootLinesEl.textContent = bootLines.join('\n');
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function typeLine(text, msPerChar) {
+  bootLines.push('');
+  const idx = bootLines.length - 1;
+  for (let i = 0; i < text.length; i++) {
+    if (skipRequested) {
+      bootLines[idx] = text;
+      renderBootLines();
+      return;
+    }
+    bootLines[idx] += text[i];
+    renderBootLines();
+    await sleep(msPerChar);
+  }
+}
+
+async function typeMemoryLine() {
+  bootLines.push('');
+  const idx = bootLines.length - 1;
+  const steps = 20;
+  for (let i = 1; i <= steps; i++) {
+    if (skipRequested) break;
+    const kb = Math.round((MEMORY_TARGET_KB / steps) * i);
+    bootLines[idx] = `MEMORY TEST : ${kb} KB`;
+    renderBootLines();
+    await sleep(18);
+  }
+  bootLines[idx] = `MEMORY TEST : ${MEMORY_TARGET_KB} KB OK`;
+  renderBootLines();
+}
+
+async function runBootSequence() {
+  for (const l of BOOT_LINES) {
+    if (skipRequested) {
+      bootLines.push(l.memory ? `MEMORY TEST : ${MEMORY_TARGET_KB} KB OK` : l.text);
+      renderBootLines();
+      continue;
+    }
+    if (l.memory) await typeMemoryLine();
+    else await typeLine(l.text, 11);
+  }
+  finishTyping();
+}
+
+function finishTyping() {
+  typingDone = true;
+  bootGdpr.hidden = false;
+}
+
+function skipTyping() {
+  if (typingDone) return;
+  skipRequested = true;
+}
+
+boot.addEventListener('click', () => skipTyping());
+document.addEventListener('keydown', () => {
+  if (boot.hidden || boot.classList.contains('dissolve')) return;
+  skipTyping();
+});
+
+function dissolveBoot() {
+  boot.classList.add('dissolve');
+  setTimeout(() => {
+    boot.hidden = true;
+  }, 400);
   runProbeAndShowModes();
+}
+
+btnBootAccept.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setConsent();
+  dissolveBoot();
 });
 
 if (hasConsent()) {
+  boot.hidden = true;
   runProbeAndShowModes();
+} else {
+  runBootSequence();
 }
+
+// ---------------------------------------------------------------------------
+// Screen 2 — sparse ASCII bloom glyphs, spawned outside the welcome panel.
+// ---------------------------------------------------------------------------
+
+const GLYPH_CHARS = ['✶', '·', '✦', '+', '·', '✧'];
+const GLYPH_COLORS = ['var(--red)', 'var(--cyan)', 'var(--white)'];
+const MAX_GLYPHS = 7;
+let activeGlyphs = 0;
+
+function spawnGlyph() {
+  if (activeGlyphs >= MAX_GLYPHS || !asciiGlyphs) return;
+  activeGlyphs++;
+
+  const el = document.createElement('span');
+  el.className = 'ascii-glyph';
+  el.textContent = GLYPH_CHARS[Math.floor(Math.random() * GLYPH_CHARS.length)];
+  el.style.color = GLYPH_COLORS[Math.floor(Math.random() * GLYPH_COLORS.length)];
+
+  // Keep glyphs out of the centered panel: bias toward the side margins.
+  const xSide = Math.random() < 0.5 ? Math.random() * 18 : 82 + Math.random() * 18;
+  const y = Math.random() * 100;
+  el.style.left = xSide + '%';
+  el.style.top = y + '%';
+
+  asciiGlyphs.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => {
+      el.remove();
+      activeGlyphs--;
+    }, 1500);
+  }, 1500 + 3000);
+}
+
+function glyphLoop() {
+  spawnGlyph();
+  setTimeout(glyphLoop, 900 + Math.random() * 1400);
+}
+glyphLoop();
 
 async function startWithMode(mode) {
   pendingMode = mode;

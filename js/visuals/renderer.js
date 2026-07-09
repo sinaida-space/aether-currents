@@ -45,6 +45,7 @@ export class Renderer {
     this.glCanvas = glCanvas;
     this.mode = opts.mode === 'light' ? 'light' : 'full';
     this.cfg = MODES[this.mode];
+    this.video = opts.video || null;
 
     const gl = glCanvas.getContext('webgl2', {
       antialias: false, alpha: false, depth: false,
@@ -80,13 +81,28 @@ export class Renderer {
       feedback: this._locs(this.pFeedback, ['uScene', 'uPrev', 'uDecay', 'uRot', 'uZoom', 'uInput']),
       threshold: this._locs(this.pThreshold, ['uTex', 'uThresh']),
       blur: this._locs(this.pBlur, ['uTex', 'uDir']),
-      grade: this._locs(this.pGrade, ['uFeedback', 'uBloom', 'uTime', 'uCentroid', 'uLevel',
-        'uFrozen', 'uAberr', 'uVignette', 'uRes']),
+      grade: this._locs(this.pGrade, ['uFeedback', 'uBloom', 'uCam', 'uCamOn', 'uCamRes',
+        'uTime', 'uCentroid', 'uLevel', 'uFrozen', 'uAberr', 'uVignette', 'uRes']),
     };
 
     // empty VAO — WebGL2 needs one bound even for attribute-less draws
     this.vao = gl.createVertexArray();
     gl.bindVertexArray(this.vao);
+
+    // VHS webcam background: single reused texture, uploaded from the video
+    // element only while the toggle is on/easing (frame()). Seeded with a
+    // 1x1 black pixel so it's defined before the first real upload.
+    this.camTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.camTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this._camOnTarget = 0;
+    this._camOn = 0;
+    this._camResX = 1;
+    this._camResY = 1;
 
     // simulation state (fixed size, never reallocated on resize)
     this.simSize = this.cfg.simSize;
@@ -245,6 +261,11 @@ export class Renderer {
     this.gl.drawArrays(this.gl.TRIANGLES, 0, 3);
   }
 
+  // VHS background toggle — eased 0..1 over ~0.5s (time-constant ~0.15s).
+  setCamOn(on) {
+    this._camOnTarget = on ? 1 : 0;
+  }
+
   // Pull hand fields into preallocated uniform scratch. Defensive against nulls.
   _readState(state) {
     const L = this._landmarks;
@@ -332,6 +353,17 @@ export class Renderer {
     this.fps = this._fpsEMA;
 
     this._readState(state);
+
+    // VHS background: ease toggle, upload the current video frame only while on
+    const easeRate = 1 - Math.exp(-dt / 0.15);
+    this._camOn += (this._camOnTarget - this._camOn) * easeRate;
+    if (this._camOn < 0.001) this._camOn = 0;
+    if (this.video && this._camOnTarget > 0.5 && this.video.readyState >= 2) {
+      gl.bindTexture(gl.TEXTURE_2D, this.camTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.video);
+      this._camResX = this.video.videoWidth || 1;
+      this._camResY = this.video.videoHeight || 1;
+    }
 
     // burst decay
     if (this._burstTimer > 0) {
@@ -458,9 +490,14 @@ export class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, feedbackCur);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, bloomCur);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, this.camTex);
     const ug = this.u.grade;
     gl.uniform1i(ug.uFeedback, 0);
     gl.uniform1i(ug.uBloom, 1);
+    gl.uniform1i(ug.uCam, 2);
+    gl.uniform1f(ug.uCamOn, this._camOn);
+    gl.uniform2f(ug.uCamRes, this._camResX, this._camResY);
     gl.uniform1f(ug.uTime, this.time);
     gl.uniform1f(ug.uCentroid, this._centroid);
     gl.uniform1f(ug.uLevel, this._level);

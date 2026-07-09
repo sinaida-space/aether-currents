@@ -218,6 +218,9 @@ in vec2 vUV;
 out vec4 outColor;
 uniform sampler2D uFeedback;
 uniform sampler2D uBloom;
+uniform sampler2D uCam;
+uniform float uCamOn;
+uniform vec2  uCamRes;
 uniform float uTime;
 uniform float uCentroid;
 uniform float uLevel;
@@ -232,6 +235,60 @@ vec3 hsv2rgb(vec3 c){
   return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
 }
 float hash21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float hash1(float p){ return fract(sin(p * 127.1) * 43758.5453); }
+
+// cover-fit + mirror (selfie view) into the webcam texture's own aspect
+vec2 camUV(vec2 uv){
+  float sAsp = uRes.x / max(uRes.y, 1.0);
+  float vAsp = uCamRes.x / max(uCamRes.y, 1.0);
+  vec2 st = uv - 0.5;
+  if (sAsp > vAsp) {
+    st.y *= vAsp / sAsp;
+  } else {
+    st.x *= sAsp / vAsp;
+  }
+  st += 0.5;
+  st.x = 1.0 - st.x; // mirror horizontally so it matches the particle constellation
+  return st;
+}
+
+// retro VHS-styled webcam background: RGB delay, line jitter/tearing,
+// coarse scanlines, tape noise + tracking-error band, desat + warm-magenta tint.
+vec3 vhs(vec2 uv){
+  vec2 cuv = camUV(uv);
+
+  float row = floor(uv.y * uRes.y);
+  float jitter = (hash1(row + floor(uTime * 30.0)) - 0.5) * 0.002;
+
+  float tearCycle = mod(uTime, 3.0);
+  float tearActive = step(tearCycle, 0.2);
+  float tearSeed = floor(uTime / 3.0);
+  float tearStart = hash1(tearSeed) * uRes.y;
+  float inBand = step(tearStart, row) * step(row, tearStart + 10.0);
+  jitter += tearActive * inBand * 0.01;
+
+  cuv.x += jitter;
+
+  float split = 0.0035 * (0.5 + uLevel);
+  float r = texture(uCam, cuv - vec2(split, 0.0)).r;
+  float g = texture(uCam, cuv).g;
+  float b = texture(uCam, cuv + vec2(split, 0.0)).b;
+  vec3 col = vec3(r, g, b);
+
+  col *= 0.82 + 0.18 * sin(uv.y * uRes.y * 3.14159265);
+
+  col += (hash21(uv * uRes + uTime * 7.0) - 0.5) * 0.08;
+  col += 0.03 * sin(uv.y * 2.0 + uTime * 0.3);
+
+  float luma = dot(col, vec3(0.299, 0.587, 0.114));
+  col = mix(col, vec3(luma), 0.35);
+  col *= vec3(1.0, 0.82, 0.9);
+
+  float v = smoothstep(1.05, 0.25, length(uv - 0.5));
+  col *= mix(0.4, 1.0, v);
+
+  return max(col, 0.0);
+}
 
 void main(){
   vec2 uv = vUV;
@@ -274,6 +331,12 @@ void main(){
   // vignette
   float v = smoothstep(1.15, 0.35, length(uv - 0.5));
   col *= mix(1.0, v, uVignette);
+
+  // VHS webcam background, composited under the graded particles/trails
+  if (uCamOn > 0.001) {
+    vec3 bg = vhs(uv) * uCamOn * (1.0 - lum * 0.55);
+    col = bg + col;
+  }
 
   outColor = vec4(max(col, 0.0), 1.0);
 }`;

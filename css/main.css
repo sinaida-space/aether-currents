@@ -366,3 +366,112 @@ body.legal-page {
   background: rgba(0, 229, 255, 0.08);
   padding: 0.1rem 0.3rem;
 }
+
+/* ---------- DOS panels (sample menu, export panel) ---------- */
+
+.dos-panel {
+  position: fixed;
+  z-index: 20;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(480px, 92vw);
+  max-height: 80vh;
+  overflow-y: auto;
+  border: 1px solid var(--red);
+  background: var(--panel-bg);
+  box-shadow: 0 0 24px rgba(255, 42, 42, 0.25);
+  padding: 1.25rem;
+}
+
+.dos-panel-title {
+  color: var(--red);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 0.95rem;
+  border-bottom: 1px solid var(--dim);
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+#sample-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  font-size: 0.9rem;
+}
+
+#sample-list li {
+  padding: 0.35rem 0.25rem;
+  color: var(--amber);
+  cursor: pointer;
+  border-bottom: 1px dashed rgba(255, 176, 0, 0.15);
+}
+
+#sample-list li:hover,
+#sample-list li.active {
+  background: var(--amber);
+  color: var(--black);
+}
+
+#sample-list li .key-hint {
+  color: var(--cyan);
+  margin-right: 0.6rem;
+}
+
+#sample-list li:hover .key-hint,
+#sample-list li.active .key-hint {
+  color: var(--black);
+}
+
+.dos-panel-note {
+  font-size: 0.72rem;
+  color: var(--dim);
+  line-height: 1.5;
+  margin: 0.5rem 0;
+}
+
+.attribution-notice {
+  border: 1px dashed var(--red);
+  color: var(--amber);
+  padding: 0.6rem;
+}
+
+.attribution-notice code {
+  color: var(--cyan);
+  background: rgba(0, 229, 255, 0.08);
+  padding: 0.1rem 0.3rem;
+  display: inline-block;
+  margin-top: 0.35rem;
+}
+
+#record-export .btn-row {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+}
+
+#btn-copy-credit.copied {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+.dos-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+}
+
+#mic-countdown-num {
+  font-size: 8rem;
+  color: var(--red);
+  text-shadow: 0 0 24px rgba(255, 42, 42, 0.7);
+}
+
+#hud-status {
+  white-space: pre-wrap;
+  max-width: 90vw;
+}

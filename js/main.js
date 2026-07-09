@@ -2,6 +2,11 @@
 // Consent -> system check -> mode select -> camera -> boot hook.
 
 import { runSystemCheck } from './syscheck.js';
+import { GranularEngine, generateLibrary, loadUserFile, captureMic } from './audio/engine.js';
+import { HandTracker } from './tracking/tracker.js';
+import { Renderer } from './visuals/renderer.js';
+import { Mapper } from './mapping.js';
+import { Recorder, downloadBlob } from './recorder.js';
 
 const CONSENT_KEY = 'ac.consent';
 const MODE_KEY = 'ac.mode';
@@ -135,3 +140,248 @@ btnFullscreen.addEventListener('click', () => {
 
 document.addEventListener('fullscreenchange', updateFullscreenLabel);
 updateFullscreenLabel();
+
+// ---------------------------------------------------------------------------
+// Task 5 — boot hook, mapping loop, sample menu, recorder.
+// ---------------------------------------------------------------------------
+
+const glCanvas = document.getElementById('gl-canvas');
+const hudCanvas = document.getElementById('hud-canvas');
+const btnRecord = document.getElementById('btn-record');
+const btnSamples = document.getElementById('btn-samples');
+
+const sampleMenu = document.getElementById('sample-menu');
+const sampleList = document.getElementById('sample-list');
+const sampleUploadInput = document.getElementById('sample-upload-input');
+const btnCloseSamples = document.getElementById('btn-close-samples');
+
+const micCountdown = document.getElementById('mic-countdown');
+const micCountdownNum = document.getElementById('mic-countdown-num');
+
+const recordExport = document.getElementById('record-export');
+const btnSaveVideo = document.getElementById('btn-save-video');
+const btnSaveAudio = document.getElementById('btn-save-audio');
+const btnCopyCredit = document.getElementById('btn-copy-credit');
+const btnCloseExport = document.getElementById('btn-close-export');
+
+const CREDIT_LINE = 'Made with AETHER CURRENTS by Sinaida — sinaida.eu';
+const UPLOAD_LABEL = '▸ UPLOAD FILE...';
+const MIC_LABEL = '▸ RECORD MIC (4S)';
+
+function progressBar(frac) {
+  const pct = Math.round(Math.max(0, Math.min(1, frac)) * 100);
+  const filled = Math.round(pct / 10);
+  const bar = '▓'.repeat(filled) + '░'.repeat(10 - filled);
+  return `LOADING VISION MODEL ${bar} ${pct}%`;
+}
+
+window.__AC_BOOT = async function __AC_BOOT(mode) {
+  hudStatus.textContent = 'BOOTING AUDIO ENGINE...';
+
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const audioContext = new AC();
+  if (audioContext.state === 'suspended') {
+    await audioContext.resume().catch(() => {});
+  }
+
+  let library = [];
+  let engine = null;
+  let tracker = null;
+  let renderer = null;
+
+  const onProgress = (frac) => {
+    hudStatus.textContent = progressBar(frac);
+  };
+
+  try {
+    const enginePromise = GranularEngine.create(audioContext);
+    const libraryPromise = generateLibrary(audioContext);
+    const trackerPromise = HandTracker.create({ video: camVideo, mode, onProgress });
+
+    // Renderer construction is synchronous WebGL setup — runs immediately,
+    // alongside the async engine/library/tracker work above.
+    renderer = new Renderer(glCanvas, hudCanvas, { mode });
+
+    [engine, library, tracker] = await Promise.all([enginePromise, libraryPromise, trackerPromise]);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[AETHER CURRENTS] boot failed:', err);
+    hudStatus.textContent = 'BOOT FAILED — SEE CONSOLE';
+    return;
+  }
+
+  hudStatus.textContent = '';
+
+  const defaultEntry = library.find((s) => s.id === 'drone') || library[0];
+  engine.setSample(defaultEntry.buffer);
+
+  const mapper = new Mapper({
+    engine,
+    tracker,
+    renderer,
+    mode,
+    sampleName: defaultEntry.name,
+  });
+
+  tracker.start();
+  mapper.start();
+
+  window.addEventListener('resize', () => renderer.resize());
+
+  // ---- sample menu ------------------------------------------------------
+
+  function renderSampleList() {
+    sampleList.innerHTML = '';
+    library.forEach((entry, i) => {
+      const li = document.createElement('li');
+      li.dataset.index = String(i);
+      li.innerHTML = `<span class="key-hint">[${i}]</span>${entry.name}`;
+      li.addEventListener('click', () => selectSample(i));
+      sampleList.appendChild(li);
+    });
+
+    const uploadLi = document.createElement('li');
+    uploadLi.textContent = UPLOAD_LABEL;
+    uploadLi.addEventListener('click', () => sampleUploadInput.click());
+    sampleList.appendChild(uploadLi);
+
+    const micLi = document.createElement('li');
+    micLi.textContent = MIC_LABEL;
+    micLi.addEventListener('click', () => recordMicSample());
+    sampleList.appendChild(micLi);
+  }
+
+  function selectSample(i) {
+    const entry = library[i];
+    if (!entry) return;
+    engine.setSample(entry.buffer);
+    mapper.setSampleName(entry.name);
+    closeSampleMenu();
+  }
+
+  function openSampleMenu() {
+    renderSampleList();
+    sampleMenu.style.display = 'block';
+  }
+
+  function closeSampleMenu() {
+    sampleMenu.style.display = 'none';
+  }
+
+  btnSamples.addEventListener('click', () => {
+    if (sampleMenu.style.display === 'none') openSampleMenu();
+    else closeSampleMenu();
+  });
+  btnCloseSamples.addEventListener('click', closeSampleMenu);
+
+  sampleUploadInput.addEventListener('change', async () => {
+    const file = sampleUploadInput.files && sampleUploadInput.files[0];
+    sampleUploadInput.value = '';
+    if (!file) return;
+    try {
+      const buffer = await loadUserFile(audioContext, file);
+      const name = file.name.replace(/\.[^.]+$/, '').toUpperCase().slice(0, 24);
+      engine.setSample(buffer);
+      mapper.setSampleName(name || 'UPLOADED');
+      closeSampleMenu();
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[AETHER CURRENTS] upload decode failed:', err);
+    }
+  });
+
+  async function recordMicSample() {
+    closeSampleMenu();
+    micCountdown.style.display = 'flex';
+    for (const n of [3, 2, 1]) {
+      micCountdownNum.textContent = String(n);
+      await new Promise((res) => setTimeout(res, 1000));
+    }
+    micCountdownNum.textContent = '●REC';
+    try {
+      const buffer = await captureMic(audioContext, 4);
+      engine.setSample(buffer);
+      mapper.setSampleName('MIC CAPTURE');
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[AETHER CURRENTS] mic capture failed:', err);
+    } finally {
+      micCountdown.style.display = 'none';
+    }
+  }
+
+  // ---- keyboard shortcuts -------------------------------------------------
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (sampleMenu.style.display !== 'none') closeSampleMenu();
+      if (recordExport.style.display !== 'none') recordExport.style.display = 'none';
+      return;
+    }
+    if (/^[0-9]$/.test(e.key)) {
+      const i = Number(e.key);
+      if (library[i]) selectSample(i);
+    }
+  });
+
+  // ---- recorder -----------------------------------------------------------
+
+  const recorder = new Recorder({
+    glCanvas,
+    hudCanvas,
+    audioNode: engine.output,
+    audioContext,
+    modeLabel: mode === 'full' ? 'FULL MODE' : 'LIGHT MODE',
+  });
+
+  let lastExport = null;
+
+  // Centralized: fires whether stop() was triggered by the button or by the
+  // recorder's own 5-minute hard-stop timer, so the UI stays in sync either way.
+  recorder.onStop = (result) => {
+    btnRecord.textContent = '● RECORD';
+    mapper.recording = false;
+    lastExport = result;
+    recordExport.style.display = 'block';
+  };
+
+  btnRecord.addEventListener('click', async () => {
+    if (!recorder.recording) {
+      await recorder.start();
+      mapper.recording = true;
+      btnRecord.textContent = '● STOP';
+    } else {
+      await recorder.stop();
+    }
+  });
+
+  btnSaveVideo.addEventListener('click', () => {
+    if (!lastExport) return;
+    downloadBlob(lastExport.webmBlob, lastExport.filename.webm);
+  });
+
+  btnSaveAudio.addEventListener('click', () => {
+    if (!lastExport) return;
+    downloadBlob(lastExport.wavBlob, lastExport.filename.wav);
+  });
+
+  btnCopyCredit.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(CREDIT_LINE);
+      const original = btnCopyCredit.textContent;
+      btnCopyCredit.textContent = 'COPIED ▪';
+      btnCopyCredit.classList.add('copied');
+      setTimeout(() => {
+        btnCopyCredit.textContent = original;
+        btnCopyCredit.classList.remove('copied');
+      }, 1500);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[AETHER CURRENTS] clipboard write failed:', err);
+    }
+  });
+
+  btnCloseExport.addEventListener('click', () => {
+    recordExport.style.display = 'none';
+  });
+};

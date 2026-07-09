@@ -68,6 +68,35 @@
   <button id="btn-samples" class="btn">SAMPLES</button>
 </div>
 
+<div id="sample-menu" class="dos-panel" style="display:none">
+  <div class="dos-panel-title">SELECT SOURCE</div>
+  <ul id="sample-list"></ul>
+  <input id="sample-upload-input" type="file" accept="audio/*" style="display:none" />
+  <div class="dos-panel-note">uploaded audio: your rights, your responsibility</div>
+  <button id="btn-close-samples" class="btn">[ ESC ] CLOSE</button>
+</div>
+
+<div id="mic-countdown" class="dos-overlay" style="display:none">
+  <div id="mic-countdown-num">3</div>
+</div>
+
+<div id="record-export" class="dos-panel" style="display:none">
+  <div class="dos-panel-title">RECORDING SAVED</div>
+  <div class="btn-row">
+    <button id="btn-save-video" class="btn">▸ SAVE VIDEO</button>
+    <button id="btn-save-audio" class="btn">▸ SAVE AUDIO (WAV)</button>
+  </div>
+  <div class="dos-panel-note attribution-notice">
+    ATTRIBUTION REQUIRED — post this line wherever you publish:<br />
+    <code id="credit-line">Made with AETHER CURRENTS by Sinaida — sinaida.eu</code>
+  </div>
+  <div class="btn-row">
+    <button id="btn-copy-credit" class="btn">▸ COPY CREDIT LINE</button>
+  </div>
+  <p class="dos-panel-note"><a href="legal/license.html" target="_blank" rel="noopener">FULL LICENSE ▸</a></p>
+  <button id="btn-close-export" class="btn">[ ESC ] CLOSE</button>
+</div>
+
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

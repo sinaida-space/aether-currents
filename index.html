@@ -13,7 +13,27 @@
 <video id="cam" playsinline muted></video>
 <div id="hud-status"></div>
 
+<div id="boot">
+  <div class="boot-inner">
+    <pre id="boot-lines" class="boot-lines"></pre>
+    <div id="boot-gdpr" class="boot-gdpr" hidden>
+      <div class="boot-gdpr-title">BEFORE YOU START</div>
+      <ul class="boot-gdpr-list">
+        <li>Your camera is processed entirely on-device — video is never uploaded, stored, or sent anywhere.</li>
+        <li>No cookies. No analytics. No server. This is a static page.</li>
+        <li>4 keys saved to your browser's localStorage, nothing else: <code>ac.consent</code> (this consent), <code>ac.mode</code> (FULL/LIGHT mode), <code>ac.bg</code> (background choice), <code>ac.osd</code> (VHS overlay toggle).</li>
+        <li>The hand-tracking model file is fetched once from Google's MediaPipe CDN — a standard file request, no video or gesture data involved.</li>
+      </ul>
+      <div class="btn-row">
+        <button id="btn-boot-accept" class="btn boot-accept">[ ACCEPT ]</button>
+        <a id="btn-boot-privacy" class="btn" href="legal/privacy.html">[ PRIVACY POLICY ]</a>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="welcome">
+  <div id="ascii-glyphs" aria-hidden="true"></div>
   <div class="welcome-panel">
     <h1 class="title">AETHER CURRENTS<span class="cursor">▮</span></h1>
     <p class="tagline">conduct sound with your hands</p>
@@ -28,20 +48,10 @@
       <tr><td>FAST OPEN PALM</td><td>burst</td></tr>
     </table>
 
-    <div class="notice">
-      No cookies. No analytics. No server. Your camera is processed entirely
-      on-device and is never uploaded anywhere. localStorage is used only to
-      remember your mode choice and this consent.
-    </div>
-
     <div class="legal-links">
       <a href="legal/privacy.html">PRIVACY</a>
       <a href="legal/terms.html">TERMS</a>
       <a href="legal/license.html">LICENSE</a>
-    </div>
-
-    <div id="consent-gate">
-      <button id="btn-consent" class="btn">[ OK, UNDERSTOOD ]</button>
     </div>
 
     <div id="mode-select">

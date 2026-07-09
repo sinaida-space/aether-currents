@@ -1,13 +1,13 @@
 // AETHER CURRENTS — DOS-style HUD on the 2D overlay canvas.
-// Pure text, amber monospace, palette-matched glow. Redraws at <=10Hz.
+// Pure text, white/red/cyan monospace, palette-matched glow. Redraws at <=10Hz.
 // Everything the recording needs is painted here (no HTML overlays).
 
-const AMBER = '#ffb000';
+const WHITE = '#f2f2f2';
 const RED = '#ff2a2a';
 const CYAN = '#00e5ff';
-const DIM = 'rgba(255,176,0,0.35)';
-const GESTURE_NORMAL = 'rgba(255,176,0,0.55)';
-const GESTURE_DIMMED = 'rgba(255,176,0,0.22)';
+const DIM = 'rgba(242,242,242,0.35)';
+const GESTURE_NORMAL = 'rgba(242,242,242,0.55)';
+const GESTURE_DIMMED = 'rgba(242,242,242,0.22)';
 const GESTURE_DIM_AFTER_MS = 60000;
 const GESTURE_LINE_WIDE =
   'R-HAND XY:POS/PITCH · PINCH:GRAIN · L-HAND Y:DENSITY · HANDS APART:FILTER+SPACE · FIST:FREEZE · FLICK OPEN:BURST';
@@ -60,7 +60,7 @@ export class Hud {
 
     const s = state || {};
     const blinkOn = Math.floor(now / 500) % 2 === 0;
-    const fontPx = Math.max(12, Math.round(14 * dpr));
+    const fontPx = Math.max(16, Math.round(18 * dpr));
     const lh = Math.round(fontPx * 1.5);
     const pad = Math.round(18 * dpr);
 
@@ -77,18 +77,18 @@ export class Hud {
     };
 
     // top-left system block
-    line('AETHER CURRENTS v1.0', AMBER);
+    line('AETHER CURRENTS v1.0', WHITE);
 
     const modeShort = (s.modeLabel || 'FULL MODE').replace(' MODE', '');
     const trk = Math.round(s.trackingFps || 0);
-    line(`MODE: ${modeShort} ▪ ${Math.round(fps || 0)}FPS ▪ TRK ${trk}FPS`, AMBER);
+    line(`MODE: ${modeShort} ▪ ${Math.round(fps || 0)}FPS ▪ TRK ${trk}FPS`, CYAN);
 
-    line(`SMP: ${(s.sampleName || '—').toUpperCase()}`, AMBER);
+    line(`SMP: ${(s.sampleName || '—').toUpperCase()}`, WHITE);
 
     const p = s.params || {};
     line(
       `POS ${fmt2(p.position)}  PIT ${fmt1(p.pitch)}  SIZ ${fmt2(p.grainSize)}  DEN ${Math.round(p.density || 0)}`,
-      AMBER
+      WHITE
     );
 
     if (s.frozen && blinkOn) line('[FROZEN]', RED);
@@ -116,7 +116,7 @@ export class Hud {
     // bottom-right watermark
     ctx.textAlign = 'right';
     ctx.fillStyle = DIM;
-    ctx.shadowColor = AMBER;
+    ctx.shadowColor = WHITE;
     ctx.shadowBlur = 4 * dpr;
     ctx.fillText('sinaida.eu', W - pad, bottomLine - fontPx);
     ctx.textAlign = 'left';
@@ -135,12 +135,12 @@ export class Hud {
     const gLines = narrow ? GESTURE_LINES_NARROW.slice() : [GESTURE_LINE_WIDE];
     gLines[gLines.length - 1] += blinkOn ? ' ▮' : ' ';
 
-    const gFontPx = Math.max(11, Math.round(13 * dpr));
+    const gFontPx = Math.max(14, Math.round(16 * dpr));
     const gLh = Math.round(gFontPx * 1.35);
     ctx.font = `${gFontPx}px "VT323", "Courier New", monospace`;
     ctx.textAlign = 'center';
     ctx.fillStyle = dimGesture ? GESTURE_DIMMED : GESTURE_NORMAL;
-    ctx.shadowColor = AMBER;
+    ctx.shadowColor = WHITE;
     ctx.shadowBlur = 4 * dpr;
     let gy = bottomLine - fontPx - Math.round(6 * dpr) - gLh * gLines.length;
     for (const text of gLines) {

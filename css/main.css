@@ -12,10 +12,13 @@
   --black: #000000;
   --red: #ff2a2a;
   --cyan: #00e5ff;
-  --amber: #ffb000;
+  --white: #f2f2f2;
   --dim: #5a5a5a;
   --panel-bg: rgba(0, 0, 0, 0.92);
   --font-mono: "VT323", "Courier New", monospace;
+  --glow-red: 0 0 8px rgba(255, 42, 42, 0.55);
+  --glow-cyan: 0 0 8px rgba(0, 229, 255, 0.55);
+  --glow-white: 0 0 8px rgba(242, 242, 242, 0.55);
 }
 
 * {
@@ -28,8 +31,15 @@ body {
   padding: 0;
   width: 100%;
   height: 100%;
+}
+
+html {
+  font-size: 20px;
+}
+
+body {
   background: var(--black);
-  color: var(--amber);
+  color: var(--white);
   font-family: var(--font-mono);
   overflow: hidden;
 }
@@ -117,12 +127,12 @@ a:focus {
 }
 
 .title {
-  font-size: 2rem;
+  font-size: 2.6rem;
   letter-spacing: 0.35em;
   text-transform: uppercase;
   color: var(--red);
   margin: 0 0 0.5rem;
-  text-shadow: 0 0 8px rgba(255, 42, 42, 0.6);
+  text-shadow: var(--glow-red);
 }
 
 .cursor {
@@ -146,46 +156,39 @@ a:focus {
   color: var(--cyan);
   text-transform: uppercase;
   letter-spacing: 0.15em;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   margin: 0 0 1.5rem;
+  text-shadow: var(--glow-cyan);
 }
 
 h2 {
   color: var(--cyan);
   text-transform: uppercase;
   letter-spacing: 0.15em;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   border-bottom: 1px solid var(--dim);
   padding-bottom: 0.35rem;
   margin: 1.5rem 0 0.75rem;
+  text-shadow: var(--glow-cyan);
 }
 
 .gesture-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: 1.05rem;
   margin-bottom: 0.5rem;
 }
 
 .gesture-table td {
   padding: 0.2rem 0.4rem;
   vertical-align: top;
-  color: var(--amber);
+  color: var(--white);
 }
 
 .gesture-table td:first-child {
   color: var(--cyan);
   white-space: nowrap;
   padding-right: 1rem;
-}
-
-.notice {
-  font-size: 0.78rem;
-  line-height: 1.5;
-  color: var(--dim);
-  border: 1px dashed var(--dim);
-  padding: 0.75rem;
-  margin: 1rem 0;
 }
 
 .legal-links {
@@ -209,19 +212,23 @@ button,
 .btn {
   font-family: var(--font-mono);
   background: transparent;
-  border: 1px solid var(--amber);
-  color: var(--amber);
+  border: 1px solid var(--white);
+  color: var(--white);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   padding: 0.6rem 1rem;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: 1rem;
   transition: all 0.15s ease;
+  text-decoration: none;
+  display: inline-block;
 }
 
 button:hover,
-.btn:hover {
-  background: var(--amber);
+.btn:hover,
+button:focus-visible,
+.btn:focus-visible {
+  background: var(--white);
   color: var(--black);
 }
 
@@ -249,7 +256,7 @@ button.recommended:hover {
 }
 
 #syscheck-status {
-  font-size: 0.78rem;
+  font-size: 0.9rem;
   color: var(--cyan);
   min-height: 1.2em;
   margin: 0.75rem 0;
@@ -257,7 +264,7 @@ button.recommended:hover {
 }
 
 #syscheck-details {
-  font-size: 0.72rem;
+  font-size: 0.85rem;
   color: var(--dim);
   line-height: 1.5;
   margin-bottom: 0.5rem;
@@ -265,10 +272,6 @@ button.recommended:hover {
 
 #mode-select {
   display: none;
-}
-
-#consent-gate {
-  display: block;
 }
 
 /* ---------- error panel ---------- */
@@ -352,21 +355,43 @@ body.legal-page {
 
 .legal-doc p,
 .legal-doc li {
-  font-size: 0.85rem;
+  font-size: 1rem;
   line-height: 1.6;
-  color: var(--amber);
+  color: var(--white);
 }
 
 .legal-doc .back-link {
   display: inline-block;
   margin-top: 2rem;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
 }
 
 .legal-doc code {
   color: var(--cyan);
   background: rgba(0, 229, 255, 0.08);
   padding: 0.1rem 0.3rem;
+}
+
+.legal-doc table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0 1.25rem;
+  font-size: 0.95rem;
+}
+
+.legal-doc th,
+.legal-doc td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--dim);
+  vertical-align: top;
+}
+
+.legal-doc th {
+  color: var(--cyan);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.8rem;
 }
 
 /* ---------- DOS panels (sample menu, export panel) ---------- */
@@ -405,14 +430,14 @@ body.legal-page {
 
 #sample-list li {
   padding: 0.35rem 0.25rem;
-  color: var(--amber);
+  color: var(--white);
   cursor: pointer;
-  border-bottom: 1px dashed rgba(255, 176, 0, 0.15);
+  border-bottom: 1px dashed rgba(242, 242, 242, 0.15);
 }
 
 #sample-list li:hover,
 #sample-list li.active {
-  background: var(--amber);
+  background: var(--red);
   color: var(--black);
 }
 
@@ -435,7 +460,7 @@ body.legal-page {
 
 .attribution-notice {
   border: 1px dashed var(--red);
-  color: var(--amber);
+  color: var(--white);
   padding: 0.6rem;
 }
 
@@ -471,5 +496,112 @@ body.legal-page {
   font-size: 8rem;
   color: var(--red);
   text-shadow: 0 0 24px rgba(255, 42, 42, 0.7);
+}
+
+/* ---------- boot / POST screen ---------- */
+
+#boot {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  background: var(--black);
+  color: var(--white);
+  overflow-y: auto;
+  cursor: pointer;
+  transition: opacity 0.4s ease;
+}
+
+#boot.dissolve {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#boot[hidden] {
+  display: none;
+}
+
+.boot-inner {
+  max-width: 640px;
+  width: 100%;
+}
+
+.boot-lines {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  line-height: 1.5;
+  color: var(--white);
+  text-shadow: var(--glow-white);
+  min-height: 10em;
+}
+
+.boot-gdpr {
+  margin-top: 1.5rem;
+  border-top: 1px dashed var(--dim);
+  padding-top: 1.25rem;
+  cursor: default;
+}
+
+.boot-gdpr-title {
+  color: var(--cyan);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  font-size: 1rem;
+  margin: 0 0 0.75rem;
+  text-shadow: var(--glow-cyan);
+}
+
+.boot-gdpr-list {
+  margin: 0 0 1.25rem;
+  padding-left: 1.2rem;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--white);
+}
+
+.boot-gdpr-list code {
+  color: var(--cyan);
+  background: rgba(0, 229, 255, 0.08);
+  padding: 0.1rem 0.3rem;
+}
+
+.boot-accept {
+  border-color: var(--red);
+  color: var(--white);
+}
+
+.boot-accept:hover,
+.boot-accept:focus-visible {
+  background: var(--red);
+  color: var(--black);
+}
+
+/* ---------- ascii bloom glyphs ---------- */
+
+#ascii-glyphs {
+  position: absolute;
+  inset: 0;
+  z-index: 13;
+  pointer-events: none;
+}
+
+.ascii-glyph {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 2rem;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  text-shadow: 0 0 12px currentColor, 0 0 24px currentColor;
+  transition: opacity 1.5s ease;
+}
+
+.ascii-glyph.show {
+  opacity: 0.85;
 }
 

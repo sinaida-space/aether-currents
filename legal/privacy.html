@@ -12,20 +12,25 @@
 
 <p>AETHER CURRENTS does not use cookies, does not run analytics, and has no accounts. There is no server behind this tool beyond the static files you're reading right now.</p>
 
-<h2>Camera</h2>
-<p>Your camera feed is processed entirely inside your browser, on your device, using the on-device hand-tracking model. Video frames are never transmitted anywhere, never stored, and never leave your machine.</p>
+<h2>WHAT THIS SITE STORES</h2>
+<table>
+  <tr><th>Key</th><th>Purpose</th></tr>
+  <tr><td><code>ac.consent</code></td><td>Remembers that you've seen and accepted this notice.</td></tr>
+  <tr><td><code>ac.mode</code></td><td>Your last chosen mode — FULL or LIGHT.</td></tr>
+  <tr><td><code>ac.bg</code></td><td>Your background choice — VOID or CAM.</td></tr>
+  <tr><td><code>ac.osd</code></td><td>Whether the VHS webcam overlay is on or off.</td></tr>
+</table>
+<p>That's all — four keys, nothing else. Clearing your browser storage removes all of them.</p>
 
-<h2>localStorage</h2>
-<p>Three keys are written to your browser's local storage, and nothing else:</p>
+<h2>WHAT NEVER LEAVES YOUR DEVICE</h2>
 <ul>
-  <li><code>ac.consent</code> — whether you've acknowledged this notice</li>
-  <li><code>ac.mode</code> — your last chosen mode (FULL or LIGHT)</li>
-  <li><code>ac.bg</code> — your background choice (VOID or CAM)</li>
+  <li><strong>Camera.</strong> Your video feed is processed entirely inside your browser, on your device, using the on-device hand-tracking model. Frames are never transmitted anywhere, never stored, and never leave your machine.</li>
+  <li><strong>Audio.</strong> Any microphone capture or sample audio you load stays local, in memory, for as long as your session runs.</li>
+  <li><strong>Recordings.</strong> Video/audio recordings you make are rendered locally and download straight to your device — they are never uploaded to a server.</li>
 </ul>
-<p>Clearing your browser storage removes all of them. No other data is written.</p>
 
-<h2>Third-party model files</h2>
-<p>The hand-tracking pipeline loads its model files from Google's MediaPipe CDN. That request is a standard file fetch — Google's servers see a normal HTTP request for a static asset, nothing about your session, your camera, or your usage. No video or gesture data is ever sent there.</p>
+<h2>THIRD-PARTY FETCHES</h2>
+<p>Two static files are fetched from third-party CDNs at load time: the MediaPipe hand-tracking library and model file, served from Google's and jsDelivr's CDNs. These are standard file requests — the server sees a normal HTTP request for a static asset, nothing about your session, your camera, or your usage. No video or gesture data is ever sent there.</p>
 
 <h2>Contact</h2>
 <p>Questions: reach out via <a href="https://sinaida.eu">sinaida.eu</a>.</p>

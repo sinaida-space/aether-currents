@@ -86,7 +86,7 @@ void main(){
     force += hv * uMomentum;                     // trail behind fast moves
   } else {
     // no hand -> slow ambient nebula, gentle pull keeps it on-screen
-    force += (vec2(0.5) - pos) * 0.05;
+    force += (vec2(0.5) - pos) * 0.22;
   }
 
   // radial shockwave
@@ -115,7 +115,9 @@ uniform sampler2D uState;
 uniform int   uTexSize;
 uniform float uAspect;      // width/height
 uniform float uPointScale;
+uniform vec2  uHandPresent;
 out float vEnergy;
+float hash11(float p){ p = fract(p * 0.1031); p *= p + 33.33; p *= p + p; return fract(p); }
 void main(){
   int idx = gl_VertexID;
   ivec2 uv = ivec2(idx % uTexSize, idx / uTexSize);
@@ -123,12 +125,17 @@ void main(){
   vec2 pos = s.xy;
   vec2 vel = (s.zw - 0.5) * 2.0;
   float e = clamp(length(vel) * 3.0, 0.0, 1.0);
-  vEnergy = e;
+
+  // same landmark assignment as the sim: anchored particles are the stars,
+  // unanchored ones are dim fog — brightness must not depend on velocity alone
+  int lm = clamp(int(hash11(float(idx) + 0.5) * 42.0), 0, 41);
+  float present = lm < 21 ? uHandPresent.x : uHandPresent.y;
+  vEnergy = mix(0.006 + e * 0.012, 0.010 + e * 0.026, present);
 
   vec2 ndc = pos * 2.0 - 1.0;
   ndc.x /= uAspect;                       // keep the constellation round
   gl_Position = vec4(ndc, 0.0, 1.0);
-  gl_PointSize = uPointScale * (0.6 + e * 1.4);
+  gl_PointSize = uPointScale * (0.6 + e * 1.4 + present * 0.5);
 }`;
 
 export const PARTICLE_FS = `#version 300 es
@@ -140,7 +147,7 @@ void main(){
   float d = length(c);
   float a = smoothstep(0.5, 0.0, d);
   a *= a;                                 // soft radial falloff
-  float i = 0.35 + vEnergy * 0.9;         // brighter when energetic
+  float i = vEnergy;                      // anchored stars bright, fog dim (set in VS)
   outColor = vec4(vec3(i), a);            // colour comes later, in grade
 }`;
 
@@ -156,13 +163,16 @@ uniform sampler2D uPrev;
 uniform float uDecay;
 uniform float uRot;
 uniform float uZoom;
+uniform float uInput;                     // scene attenuation into the loop
 void main(){
   vec2 c = vUV - 0.5;
   float s = sin(uRot), co = cos(uRot);
   c = mat2(co, -s, s, co) * c;
   c *= uZoom;                             // >1 -> echoes drift outward
   vec3 prev = texture(uPrev, c + 0.5).rgb * uDecay;
-  vec3 scene = texture(uScene, vUV).rgb;
+  // Attenuate the scene going in so the geometric series
+  // sum ~= scene*uInput/(1-uDecay) stays bounded instead of running away.
+  vec3 scene = texture(uScene, vUV).rgb * uInput;
   outColor = vec4(scene + prev, 1.0);
 }`;
 
@@ -232,13 +242,17 @@ void main(){
   vec3 base = vec3(r, g, b);
   vec3 bloom = texture(uBloom, uv).rgb;
 
-  float lum = dot(base, vec3(0.34)) + dot(bloom, vec3(0.4));
-  lum = clamp(lum, 0.0, 1.5);
+  // HDR energy from the (unbounded) feedback + bloom buffers
+  float raw = dot(base, vec3(0.34)) + dot(bloom, vec3(0.45));
+
+  // Roll energy into [0,1) so bright cores read as glow, not clipped white.
+  float lum = 1.0 - exp(-max(raw - 0.10, 0.0) * 1.4);
 
   // centroid drives hue: red (1.0) -> magenta -> cyan (0.5)
   float hue = fract(1.0 - uCentroid * 0.5);
-  float val = clamp(pow(lum, 0.85) * (0.75 + 0.9 * uLevel), 0.0, 1.4);
-  float sat = clamp(0.85 + 0.15 * uLevel - lum * 0.35, 0.0, 1.0);
+  float val = pow(lum, 0.85) * (0.7 + 0.8 * uLevel);
+  // brightest cores desaturate toward white (glow), mids keep the palette hue
+  float sat = clamp(0.9 + 0.1 * uLevel - lum * 0.7, 0.0, 1.0);
   vec3 col = hsv2rgb(vec3(hue, sat, val));
 
   // frozen -> icy cyan-white
@@ -248,8 +262,11 @@ void main(){
   // subtle chromatic fringe
   col += vec3(r - b, 0.0, b - r) * 0.12 * uAberr;
 
+  // final per-channel tonemap so peaks roll off instead of clipping
+  col = vec3(1.0) - exp(-col * 1.25);
+
   // film grain
-  col += (hash21(uv * uRes + uTime) - 0.5) * 0.06;
+  col += (hash21(uv * uRes + uTime) - 0.5) * 0.03;
 
   // ~1px scanline modulation
   col *= 0.92 + 0.08 * sin(uv.y * uRes.y);

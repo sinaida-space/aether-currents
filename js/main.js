@@ -84,7 +84,7 @@ async function runProbeAndShowModes() {
 // ---------------------------------------------------------------------------
 
 const BOOT_LINES = [
-  { text: 'AETHER BIOS v1.2 — (C) SINAIDA SYSTEMS' },
+  { text: 'AETHER BIOS v2.1 — (C) SINAIDA SYSTEMS' },
   { memory: true },
   { text: 'AETHER SOUND DRIVER ........ OK' },
   { text: 'HAND TRACKING MODULE ....... OK' },
@@ -194,7 +194,7 @@ if (hasConsent()) {
 
 const GLYPH_CHARS = ['✶', '·', '✦', '+', '·', '✧'];
 const GLYPH_COLORS = ['var(--red)', 'var(--cyan)', 'var(--white)'];
-const MAX_GLYPHS = 7;
+const MAX_GLYPHS = 14;
 let activeGlyphs = 0;
 
 function spawnGlyph() {
@@ -226,7 +226,7 @@ function spawnGlyph() {
 
 function glyphLoop() {
   spawnGlyph();
-  setTimeout(glyphLoop, 900 + Math.random() * 1400);
+  setTimeout(glyphLoop, 450 + Math.random() * 700);
 }
 glyphLoop();
 
@@ -285,6 +285,14 @@ btnFullscreen.addEventListener('click', () => {
 
 document.addEventListener('fullscreenchange', updateFullscreenLabel);
 updateFullscreenLabel();
+
+const btnHome = document.getElementById('btn-home');
+btnHome.addEventListener('click', () => {
+  // Full reload cleanly tears down camera/audio/tracker state; consent is
+  // already persisted, so this lands straight back on the mode-select screen.
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  location.reload();
+});
 
 // ---------------------------------------------------------------------------
 // Task 5 — boot hook, mapping loop, sample menu, recorder.

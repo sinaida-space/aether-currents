@@ -1,10 +1,17 @@
 # AETHER CURRENTS
 
+![AETHER CURRENTS](gh_ac_cover.png)
+
 **▸ [LIVE — full experience](https://sinaida-space.github.io/aether-currents/)**
 
 Conduct sound with your hands. A browser-based instrument: on-device hand
 tracking drives granular audio synthesis and a real-time visual layer.
 Static site, no build step, no framework — vanilla JS/CSS with ES modules.
+
+## Artists
+
+- **Sinaida** — [sinaida.eu](https://sinaida.eu)
+- **Telefm** (Belgrade) — [telefm.bandcamp.com](https://telefm.bandcamp.com/)
 
 ## Gestures
 

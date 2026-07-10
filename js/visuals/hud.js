@@ -77,7 +77,7 @@ export class Hud {
     };
 
     // top-left system block
-    line('AETHER CURRENTS v1.0', WHITE);
+    line('AETHER CURRENTS v2.1', WHITE);
 
     const modeShort = (s.modeLabel || 'FULL MODE').replace(' MODE', '');
     const trk = Math.round(s.trackingFps || 0);

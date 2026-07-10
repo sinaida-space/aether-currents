@@ -297,6 +297,7 @@ const btnSamples = document.getElementById('btn-samples');
 const btnBg = document.getElementById('btn-bg');
 
 const BG_KEY = 'ac.bg';
+const OSD_KEY = 'ac.osd';
 
 const sampleMenu = document.getElementById('sample-menu');
 const sampleList = document.getElementById('sample-list');
@@ -391,6 +392,25 @@ window.__AC_BOOT = async function __AC_BOOT(mode) {
   }
 
   btnBg.addEventListener('click', () => setBgMode(bgMode === 'CAM' ? 'VOID' : 'CAM'));
+
+  // ---- camcorder OSD toggle (T key + sample-menu row) -------------------
+
+  const osdRow = document.getElementById('osd-row');
+  const osdState = document.getElementById('osd-state');
+  let osdOn = localStorage.getItem(OSD_KEY) !== '0'; // default ON
+  renderer.setOsdOn(osdOn);
+
+  function updateOsdRow() {
+    if (osdState) osdState.textContent = osdOn ? 'ON' : 'OFF';
+  }
+  function setOsd(next) {
+    osdOn = next;
+    localStorage.setItem(OSD_KEY, osdOn ? '1' : '0');
+    renderer.setOsdOn(osdOn);
+    updateOsdRow();
+  }
+  updateOsdRow();
+  if (osdRow) osdRow.addEventListener('click', () => setOsd(!osdOn));
 
   // ---- sample menu ------------------------------------------------------
 
@@ -489,6 +509,9 @@ window.__AC_BOOT = async function __AC_BOOT(mode) {
     }
     if (e.key === 'v' || e.key === 'V') {
       setBgMode(bgMode === 'CAM' ? 'VOID' : 'CAM');
+    }
+    if (e.key === 't' || e.key === 'T') {
+      setOsd(!osdOn);
     }
   });
 

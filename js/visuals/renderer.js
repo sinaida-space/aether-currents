@@ -10,7 +10,7 @@
 
 import {
   QUAD_VS, SIM_FS, PARTICLE_VS, PARTICLE_FS,
-  FEEDBACK_FS, THRESHOLD_FS, BLUR_FS, GRADE_FS,
+  FEEDBACK_FS, THRESHOLD_FS, BLUR_FS, GRADE_FS, COPY_FS,
 } from './shaders.js';
 import { Hud } from './hud.js';
 
@@ -18,6 +18,9 @@ const MODES = {
   full:  { simSize: 256, dprCap: 2, renderScale: 1.0, bloomIter: 2 },
   light: { simSize: 128, dprCap: 1, renderScale: 0.5, bloomIter: 1 },
 };
+
+// found-footage glitch event types
+const G_DATAMOSH = 1, G_ASCII = 2, G_BLEED = 3, G_WOBBLE = 4;
 
 function compile(gl, type, src) {
   const sh = gl.createShader(type);
@@ -71,6 +74,7 @@ export class Renderer {
     this.pThreshold = program(gl, QUAD_VS, THRESHOLD_FS);
     this.pBlur = program(gl, QUAD_VS, BLUR_FS);
     this.pGrade = program(gl, QUAD_VS, GRADE_FS);
+    this.pCopy = program(gl, QUAD_VS, COPY_FS);
 
     // uniform locations
     this.u = {
@@ -81,8 +85,10 @@ export class Renderer {
       feedback: this._locs(this.pFeedback, ['uScene', 'uPrev', 'uDecay', 'uRot', 'uZoom', 'uInput']),
       threshold: this._locs(this.pThreshold, ['uTex', 'uThresh']),
       blur: this._locs(this.pBlur, ['uTex', 'uDir']),
-      grade: this._locs(this.pGrade, ['uFeedback', 'uBloom', 'uCam', 'uCamOn', 'uCamRes',
-        'uTime', 'uCentroid', 'uLevel', 'uFrozen', 'uAberr', 'uVignette', 'uRes']),
+      grade: this._locs(this.pGrade, ['uFeedback', 'uBloom', 'uCam', 'uPrevCam', 'uGlyphAtlas',
+        'uCamOn', 'uCamRes', 'uTime', 'uCentroid', 'uLevel', 'uFrozen', 'uAberr', 'uVignette',
+        'uRes', 'uGlyphCount', 'uGlitchType', 'uGlitchProg', 'uGlitchSeed', 'uMotion']),
+      copy: this._locs(this.pCopy, ['uTex']),
     };
 
     // empty VAO — WebGL2 needs one bound even for attribute-less draws
@@ -103,6 +109,46 @@ export class Renderer {
     this._camOn = 0;
     this._camResX = 1;
     this._camResY = 1;
+
+    // Previous-cam ping-pong (fixed 480x270 RGBA8, never reallocated): datamosh
+    // samples last frame's cam. Two small textures we blit between each frame.
+    this._prevCamW = 480; this._prevCamH = 270;
+    this._prevCamTex = [null, null];
+    this._prevCamFBO = [null, null];
+    for (let i = 0; i < 2; i++) {
+      const t = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, this._prevCamW, this._prevCamH, 0,
+        gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      this._prevCamTex[i] = t;
+      this._prevCamFBO[i] = this._makeFBO(t);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this._prevCamIndex = 0;
+
+    // glyph atlas for asciiDisplace (built once from an offscreen 2D canvas)
+    this._buildGlyphAtlas();
+
+    // glitch scheduler state (zero per-frame allocation)
+    this._glitchActive = false;
+    this._glitchType = 0;
+    this._glitchT0 = 0;
+    this._glitchDur = 0;
+    this._glitchSeed = 0;
+    this._glitchProg = 0;
+    this._nextGlitchAt = 0;
+    this._audioPrevLevel = 0;
+    this._audioCooldown = 0;
+    this._motionEMA = new Float32Array(2);
+
+    // camcorder OSD state (hud reads these via the object passed to draw)
+    this._camEnabledAt = 0;
+    this._osdOn = true;
 
     // simulation state (fixed size, never reallocated on resize)
     this.simSize = this.cfg.simSize;
@@ -167,6 +213,96 @@ export class Renderer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
     return fbo;
+  }
+
+  // One-time glyph ramp atlas (white-on-black VT323 chars in a single row).
+  _buildGlyphAtlas() {
+    const gl = this.gl;
+    const glyphs = ' .:-+*#%@▒▓'; // space .:-+*#%@ ▒ ▓
+    this._glyphCount = glyphs.length;
+    const cell = 32;
+    const w = cell * glyphs.length, h = cell;
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const c = cv.getContext('2d');
+    c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#fff';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.font = `${cell - 6}px "VT323", monospace`;
+    for (let i = 0; i < glyphs.length; i++) {
+      c.fillText(glyphs[i], i * cell + cell / 2, h / 2 + 1);
+    }
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this.glyphTex = tex;
+  }
+
+  _startGlitch(type) {
+    this._glitchActive = true;
+    this._glitchType = type;
+    this._glitchT0 = this.time;
+    this._glitchSeed = Math.random() * 997.0;
+    let d;
+    if (type === G_DATAMOSH) d = 0.3 + Math.random() * 0.4;
+    else if (type === G_ASCII) d = 1.0 + Math.random() * 1.0;
+    else if (type === G_BLEED) d = 2.0 + Math.random() * 2.0;
+    else d = 0.4; // microWobble
+    this._glitchDur = d;
+    this._glitchProg = 0;
+  }
+
+  _pickGlitch() {
+    const r = Math.random();
+    if (r < 0.35) return G_DATAMOSH;
+    if (r < 0.60) return G_ASCII;
+    if (r < 0.85) return G_BLEED;
+    return G_WOBBLE;
+  }
+
+  // Curated scheduler: one tasteful event every 4-9s, plus an audio-spike
+  // datamosh. Only runs while the cam background is on.
+  _updateGlitch(dt, camActive) {
+    if (!camActive) {
+      this._glitchActive = false; this._glitchType = 0;
+      this._nextGlitchAt = 0; this._audioPrevLevel = 0; this._audioCooldown = 0;
+      return;
+    }
+    if (this._nextGlitchAt === 0) this._nextGlitchAt = this.time + 4 + Math.random() * 5;
+
+    // audio rising-edge over ~0.55 -> datamosh (min 2.5s cooldown)
+    this._audioCooldown = Math.max(0, this._audioCooldown - dt);
+    const lvl = this._level;
+    if (lvl > 0.55 && this._audioPrevLevel <= 0.55 && this._audioCooldown === 0 && !this._glitchActive) {
+      this._startGlitch(G_DATAMOSH);
+      this._audioCooldown = 2.5;
+    }
+    this._audioPrevLevel = lvl;
+
+    // scheduled event
+    if (!this._glitchActive && this.time >= this._nextGlitchAt) {
+      this._startGlitch(this._pickGlitch());
+      this._nextGlitchAt = this.time + 4 + Math.random() * 5;
+    }
+
+    // advance the active event envelope
+    if (this._glitchActive) {
+      const p = (this.time - this._glitchT0) / this._glitchDur;
+      this._glitchProg = p < 0 ? 0 : (p > 1 ? 1 : p);
+      if (p >= 1) { this._glitchActive = false; this._glitchType = 0; }
+    }
+
+    // recent global motion (EMA of hand velocities) biases the datamosh drift
+    const mx = (this._handVelL[0] + this._handVelR[0]) * 0.5;
+    const my = (this._handVelL[1] + this._handVelR[1]) * 0.5;
+    this._motionEMA[0] += (mx - this._motionEMA[0]) * 0.08;
+    this._motionEMA[1] += (my - this._motionEMA[1]) * 0.08;
   }
 
   _initSim() {
@@ -263,7 +399,14 @@ export class Renderer {
 
   // VHS background toggle — eased 0..1 over ~0.5s (time-constant ~0.15s).
   setCamOn(on) {
-    this._camOnTarget = on ? 1 : 0;
+    const t = on ? 1 : 0;
+    if (t && this._camOnTarget < 0.5) this._camEnabledAt = performance.now();
+    this._camOnTarget = t;
+  }
+
+  // Camcorder OSD toggle (REC dot, tape counter, date, battery). Hud reads this.
+  setOsdOn(on) {
+    this._osdOn = !!on;
   }
 
   // Pull hand fields into preallocated uniform scratch. Defensive against nulls.
@@ -360,10 +503,18 @@ export class Renderer {
     if (this._camOn < 0.001) this._camOn = 0;
     if (this.video && this._camOnTarget > 0.5 && this.video.readyState >= 2) {
       gl.bindTexture(gl.TEXTURE_2D, this.camTex);
+      // Flip Y on upload so the webcam is upright (default puts the video's top
+      // row at t=0 = screen bottom). camUV already mirrors X for the selfie view.
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.video);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); // other uploads rely on default
       this._camResX = this.video.videoWidth || 1;
       this._camResY = this.video.videoHeight || 1;
     }
+
+    // glitch scheduler (only while the cam background is on)
+    const camActive = this._camOnTarget > 0.5;
+    this._updateGlitch(dt, camActive);
 
     // burst decay
     if (this._burstTimer > 0) {
@@ -492,10 +643,16 @@ export class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, bloomCur);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.camTex);
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, this._prevCamTex[this._prevCamIndex]);
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_2D, this.glyphTex);
     const ug = this.u.grade;
     gl.uniform1i(ug.uFeedback, 0);
     gl.uniform1i(ug.uBloom, 1);
     gl.uniform1i(ug.uCam, 2);
+    gl.uniform1i(ug.uPrevCam, 3);
+    gl.uniform1i(ug.uGlyphAtlas, 4);
     gl.uniform1f(ug.uCamOn, this._camOn);
     gl.uniform2f(ug.uCamRes, this._camResX, this._camResY);
     gl.uniform1f(ug.uTime, this.time);
@@ -505,9 +662,33 @@ export class Renderer {
     gl.uniform1f(ug.uAberr, this._level * 0.5 + this._burstFlash * 1.5);
     gl.uniform1f(ug.uVignette, 0.85);
     gl.uniform2f(ug.uRes, this.glCanvas.width, this.glCanvas.height);
+    gl.uniform1f(ug.uGlyphCount, this._glyphCount);
+    gl.uniform1f(ug.uGlitchType, this._glitchActive ? this._glitchType : 0);
+    gl.uniform1f(ug.uGlitchProg, this._glitchActive ? this._glitchProg : 0);
+    gl.uniform1f(ug.uGlitchSeed, this._glitchSeed);
+    gl.uniform2fv(ug.uMotion, this._motionEMA);
     this._fullscreenDraw();
 
+    // ---- 6. stash cam frame into the prev-cam ping-pong (datamosh source) ----
+    // Runs only while the cam is on; VOID mode never touches these buffers.
+    if (camActive) {
+      const dstP = this._prevCamIndex ^ 1;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this._prevCamFBO[dstP]);
+      gl.viewport(0, 0, this._prevCamW, this._prevCamH);
+      gl.useProgram(this.pCopy);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, this.camTex);
+      gl.uniform1i(this.u.copy.uTex, 0);
+      this._fullscreenDraw();
+      this._prevCamIndex = dstP;
+    }
+
     // ---- HUD ----------------------------------------------------------------
-    this.hud.draw(state, this.fps, performance.now());
+    const nowMs = performance.now();
+    this.hud.draw(state, this.fps, nowMs, {
+      osdOn: this._osdOn,
+      camOn: camActive,
+      camMs: this._camEnabledAt ? nowMs - this._camEnabledAt : 0,
+    });
   }
 }

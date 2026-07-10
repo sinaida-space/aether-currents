@@ -130,7 +130,7 @@ void main(){
   // unanchored ones are dim fog — brightness must not depend on velocity alone
   int lm = clamp(int(hash11(float(idx) + 0.5) * 42.0), 0, 41);
   float present = lm < 21 ? uHandPresent.x : uHandPresent.y;
-  vEnergy = mix(0.006 + e * 0.012, 0.010 + e * 0.026, present);
+  vEnergy = mix(0.006 + e * 0.012, 0.026 + e * 0.05, present);
 
   vec2 ndc = pos * 2.0 - 1.0;
   ndc.x /= uAspect;                       // keep the constellation round
@@ -412,11 +412,14 @@ void main(){
   float raw = dot(base, vec3(0.34)) + dot(bloom, vec3(0.45));
 
   // Roll energy into [0,1) so bright cores read as glow, not clipped white.
-  float lum = 1.0 - exp(-max(raw - 0.10, 0.0) * 1.4);
+  // No hard pedestal here — a fixed cutoff was crushing normal hand-particle
+  // energy (well under the old 0.10 floor) to pure black. A smooth curve
+  // still keeps empty space dark while letting real signal read as glow.
+  float lum = 1.0 - exp(-max(raw, 0.0) * 3.2);
 
   // centroid drives hue: red (1.0) -> magenta -> cyan (0.5)
   float hue = fract(1.0 - uCentroid * 0.5);
-  float val = pow(lum, 0.85) * (0.7 + 0.8 * uLevel);
+  float val = pow(lum, 0.7) * (1.05 + 1.2 * uLevel);
   // brightest cores desaturate toward white (glow), mids keep the palette hue
   float sat = clamp(0.9 + 0.1 * uLevel - lum * 0.7, 0.0, 1.0);
   vec3 col = hsv2rgb(vec3(hue, sat, val));
@@ -429,7 +432,7 @@ void main(){
   col += vec3(r - b, 0.0, b - r) * 0.12 * uAberr;
 
   // final per-channel tonemap so peaks roll off instead of clipping
-  col = vec3(1.0) - exp(-col * 1.25);
+  col = vec3(1.0) - exp(-col * 1.5);
 
   // film grain
   col += (hash21(uv * uRes + uTime) - 0.5) * 0.03;
@@ -441,9 +444,10 @@ void main(){
   float v = smoothstep(1.15, 0.35, length(uv - 0.5));
   col *= mix(1.0, v, uVignette);
 
-  // VHS webcam background, composited under the graded particles/trails
+  // VHS webcam background, composited under the graded particles/trails —
+  // kept dark so the hand-driven glow reads as the brightest thing on screen.
   if (uCamOn > 0.001) {
-    vec3 bg = vhs(uv) * uCamOn * (1.0 - lum * 0.55);
+    vec3 bg = vhs(uv) * 0.45 * uCamOn * (1.0 - lum * 0.75);
     col = bg + col;
   }
 

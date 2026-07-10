@@ -47,8 +47,8 @@ export class Hud {
     this.lastDraw = -1e9; // force redraw after a resize
   }
 
-  // now = ms timestamp; fps = renderer.fps
-  draw(state, fps, now) {
+  // now = ms timestamp; fps = renderer.fps; osd = {osdOn, camOn, camMs} from renderer
+  draw(state, fps, now, osd) {
     if (now - this.lastDraw < 100) return; // throttle to 10Hz
     this.lastDraw = now;
 
@@ -112,6 +112,41 @@ export class Hud {
     // reserve clearance so the fixed bottom ui-bar never overlaps our text
     const uiClearance = Math.round(58 * dpr);
     const bottomLine = H - uiClearance;
+
+    // camcorder OSD — only while the cam background is on and the toggle is set.
+    // Composited into the hud canvas, so it lands in recordings automatically.
+    if (osd && osd.osdOn && osd.camOn) {
+      ctx.font = `${fontPx}px "VT323", "Courier New", monospace`;
+      ctx.shadowBlur = 8 * dpr;
+
+      // top-right: blinking REC + tape counter
+      ctx.textAlign = 'right';
+      const rx = W - pad;
+      if (blinkOn) {
+        ctx.fillStyle = RED; ctx.shadowColor = RED;
+        ctx.fillText('● REC', rx, pad);
+      }
+      const sec = Math.floor((osd.camMs || 0) / 1000);
+      const mm = String(Math.floor(sec / 60) % 60).padStart(2, '0');
+      const ss = String(sec % 60).padStart(2, '0');
+      ctx.fillStyle = WHITE; ctx.shadowColor = WHITE;
+      ctx.fillText(`SP 0:${mm}:${ss}`, rx, pad + lh);
+
+      // bottom-left: date stamp + battery glyph
+      const d = new Date();
+      const MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
+        'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+      const stamp = `${MON[d.getMonth()]} ${String(d.getDate()).padStart(2, '0')} ${d.getFullYear()}`;
+      ctx.textAlign = 'left';
+      ctx.shadowColor = WHITE; ctx.shadowBlur = 6 * dpr;
+      ctx.fillStyle = DIM;
+      ctx.fillText(stamp, pad, bottomLine - fontPx - lh);
+      ctx.fillStyle = WHITE;
+      ctx.fillText('▐███▌', pad, bottomLine - fontPx);
+
+      ctx.textAlign = 'left';
+      ctx.shadowBlur = 0;
+    }
 
     // bottom-right watermark
     ctx.textAlign = 'right';

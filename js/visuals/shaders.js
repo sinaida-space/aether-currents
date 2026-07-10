@@ -219,6 +219,8 @@ out vec4 outColor;
 uniform sampler2D uFeedback;
 uniform sampler2D uBloom;
 uniform sampler2D uCam;
+uniform sampler2D uPrevCam;    // downscaled previous cam frame (datamosh source)
+uniform sampler2D uGlyphAtlas; // 1-row glyph ramp for asciiDisplace
 uniform float uCamOn;
 uniform vec2  uCamRes;
 uniform float uTime;
@@ -228,6 +230,11 @@ uniform float uFrozen;
 uniform float uAberr;
 uniform float uVignette;
 uniform vec2  uRes;
+uniform float uGlyphCount;     // glyphs in the atlas ramp
+uniform float uGlitchType;     // 0 none, 1 datamosh, 2 ascii, 3 colorBleed, 4 microWobble
+uniform float uGlitchProg;     // 0..1 across the active event
+uniform float uGlitchSeed;     // per-event random
+uniform vec2  uMotion;         // recent global motion (datamosh bias)
 
 vec3 hsv2rgb(vec3 c){
   vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
@@ -252,10 +259,101 @@ vec2 camUV(vec2 uv){
   return st;
 }
 
+// --- found-footage glitch helpers (all operate on the cam background) -------
+// Envelope: fast attack, smooth decay — an event blooms in and dissolves out.
+float glitchEnv(float p){ return smoothstep(0.0, 0.12, p) * smoothstep(1.0, 0.30, p); }
+
+vec3 sampleCam(vec2 cuv, float split){
+  float r = texture(uCam, cuv - vec2(split, 0.0)).r;
+  float g = texture(uCam, cuv).g;
+  float b = texture(uCam, cuv + vec2(split, 0.0)).b;
+  return vec3(r, g, b);
+}
+vec3 samplePrev(vec2 cuv, float split){
+  float r = texture(uPrevCam, cuv - vec2(split, 0.0)).r;
+  float g = texture(uPrevCam, cuv).g;
+  float b = texture(uPrevCam, cuv + vec2(split, 0.0)).b;
+  return vec3(r, g, b);
+}
+
+// datamosh: ~24px blocks, ~45% displaced along recent motion, sampled from the
+// PREVIOUS cam frame with a boosted RGB delay — clean blocks stay put.
+vec3 datamosh(vec2 cuv, float split, float k, float seed){
+  float bscale = 0.6 + 0.8 * fract(seed * 13.1);           // block size ±40%
+  float blocksY = (uCamRes.y / 24.0) / bscale;
+  vec2 blocks = vec2(blocksY * (uCamRes.x / max(uCamRes.y, 1.0)), blocksY);
+  vec2 cell = floor(cuv * blocks);
+  float h1 = hash21(cell + seed);
+  float h2 = hash21(cell + seed + 7.3);
+  float aff = step(0.55, h1);                              // ~45% of blocks
+  vec2 mdir = uMotion; float ml = length(mdir);
+  mdir = ml > 1e-3 ? mdir / ml : vec2(1.0, 0.0);
+  vec2 off = mdir * (0.01 + 0.03 * h2) * k * aff;
+  off += (vec2(h2, hash21(cell + seed + 3.1)) - 0.5) * 0.006 * k * aff;
+  vec3 moshed = samplePrev(cuv + off, split * 2.0);
+  vec3 clean = sampleCam(cuv, split);
+  return mix(clean, moshed, aff * k);
+}
+
+// colorBleed: chroma smears down/right, low-pass look, saturation drifts ±15%.
+vec3 colorBleed(vec2 cuv, float split, float k, float seed){
+  vec3 base = sampleCam(cuv, split);
+  float o = 0.012 * k;
+  float r = texture(uCam, cuv + vec2(o, o)).r;
+  float b = texture(uCam, cuv + vec2(o * 0.5, o * 1.6)).b;
+  vec3 bled = vec3(mix(base.r, r, 0.6), base.g, mix(base.b, b, 0.6));
+  bled += texture(uCam, cuv + vec2(0.0, o * 2.0)).rgb * 0.15;
+  bled /= 1.15;
+  float luma = dot(bled, vec3(0.299, 0.587, 0.114));
+  float sd = 1.0 + 0.15 * sin(uTime * 2.0 + seed * 6.2831) * k;
+  bled = mix(vec3(luma), bled, sd);
+  return mix(base, bled, k);
+}
+
+// asciiDisplace: tint each glyph cell toward red / cyan / white (never amber).
+vec3 asciiTint(vec3 c){
+  float l = dot(c, vec3(0.299, 0.587, 0.114));
+  vec3 red  = vec3(1.0, 0.16, 0.16);
+  vec3 cyan = vec3(0.0, 0.90, 1.0);
+  vec3 white = vec3(0.96);
+  vec3 t = mix(red, cyan, clamp((c.b - c.r) + 0.5, 0.0, 1.0));
+  t = mix(t, white, smoothstep(0.55, 0.95, l));
+  return t * (0.35 + 0.9 * l);
+}
+// re-render the frame as ~16px character cells, luma->glyph, cells displaced
+// ±1 by a per-cell hash for the "simulation seams" feel.
+vec3 asciiCells(vec2 uv, float seed){
+  vec2 grid = uRes / 16.0;
+  vec2 cellId = floor(uv * grid);
+  float lhash = hash21(cellId + seed);
+  vec2 dispCell = cellId;
+  dispCell.x += (lhash > 0.82 ? 1.0 : (lhash < 0.18 ? -1.0 : 0.0));
+  vec2 cellCenter = (dispCell + 0.5) / grid;
+  vec3 camc = texture(uCam, camUV(cellCenter)).rgb;
+  float luma = dot(camc, vec3(0.299, 0.587, 0.114));
+  float gi = floor(clamp(luma, 0.0, 0.999) * uGlyphCount);
+  vec2 f = fract(uv * grid);
+  float glyph = texture(uGlyphAtlas, vec2((gi + f.x) / uGlyphCount, f.y)).r;
+  return glyph * asciiTint(camc);
+}
+
 // retro VHS-styled webcam background: RGB delay, line jitter/tearing,
 // coarse scanlines, tape noise + tracking-error band, desat + warm-magenta tint.
+// Curated glitch events layer in on top, always tuned to stay recognizable.
 vec3 vhs(vec2 uv){
-  vec2 cuv = camUV(uv);
+  float gtype = uGlitchType;
+  float k = glitchEnv(uGlitchProg);
+  float seed = uGlitchSeed;
+
+  // microWobble bends the sampling uv (worn tape) + brief brightness flicker
+  vec2 wuv = uv;
+  float flick = 0.0;
+  if (gtype > 3.5) {
+    wuv.y += sin(uv.y * 80.0 + uTime * 38.0) * 0.004 * k;
+    flick = 0.12 * k * sin(uTime * 46.0);
+  }
+
+  vec2 cuv = camUV(wuv);
 
   float row = floor(uv.y * uRes.y);
   float jitter = (hash1(row + floor(uTime * 30.0)) - 0.5) * 0.002;
@@ -270,19 +368,30 @@ vec3 vhs(vec2 uv){
   cuv.x += jitter;
 
   float split = 0.0035 * (0.5 + uLevel);
-  float r = texture(uCam, cuv - vec2(split, 0.0)).r;
-  float g = texture(uCam, cuv).g;
-  float b = texture(uCam, cuv + vec2(split, 0.0)).b;
-  vec3 col = vec3(r, g, b);
+
+  vec3 col;
+  float asc = 0.0;
+  if (gtype > 0.5 && gtype < 1.5) {          // datamosh
+    col = datamosh(cuv, split, k, seed);
+  } else if (gtype > 1.5 && gtype < 2.5) {   // asciiDisplace
+    vec3 camc = sampleCam(cuv, split);
+    asc = k;
+    col = mix(camc, asciiCells(uv, seed), k);
+  } else if (gtype > 2.5 && gtype < 3.5) {   // colorBleed
+    col = colorBleed(cuv, split, k, seed);
+  } else {                                    // none / microWobble
+    col = sampleCam(cuv, split) + flick;
+  }
 
   col *= 0.82 + 0.18 * sin(uv.y * uRes.y * 3.14159265);
 
   col += (hash21(uv * uRes + uTime * 7.0) - 0.5) * 0.08;
   col += 0.03 * sin(uv.y * 2.0 + uTime * 0.3);
 
+  // desat + warm-magenta tint eased out under ASCII so its palette stays crisp
   float luma = dot(col, vec3(0.299, 0.587, 0.114));
-  col = mix(col, vec3(luma), 0.35);
-  col *= vec3(1.0, 0.82, 0.9);
+  col = mix(col, vec3(luma), 0.35 * (1.0 - asc));
+  col *= mix(vec3(1.0, 0.82, 0.9), vec3(1.0), asc);
 
   float v = smoothstep(1.05, 0.25, length(uv - 0.5));
   col *= mix(0.4, 1.0, v);
@@ -340,3 +449,14 @@ void main(){
 
   outColor = vec4(max(col, 0.0), 1.0);
 }`;
+
+// ---------------------------------------------------------------------------
+// COPY — passthrough blit, used to stash a downscaled cam frame into the
+// previous-cam ping-pong that datamosh samples.
+// ---------------------------------------------------------------------------
+export const COPY_FS = `#version 300 es
+precision highp float;
+in vec2 vUV;
+out vec4 outColor;
+uniform sampler2D uTex;
+void main(){ outColor = texture(uTex, vUV); }`;

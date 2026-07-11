@@ -214,6 +214,7 @@ export class Hud {
     const bottom = bottomLine - Math.round(90 * dpr);
     const span = Math.max(1, bottom - top);
     const band = s.pitchBand;
+    const pendingBand = s.pendingPitchBand != null ? s.pendingPitchBand : null;
 
     ctx.save();
     ctx.shadowBlur = 0;
@@ -222,6 +223,7 @@ export class Hud {
       const centerFrac = 1 - (b + 0.5) / BAND_COUNT; // b=5 (top note) near y=0
       const y = top + centerFrac * span;
       const active = b === band;
+      const pending = pendingBand != null && b === pendingBand;
       ctx.strokeStyle = active ? RED : GESTURE_NORMAL;
       ctx.lineWidth = active ? 2 * dpr : 1 * dpr;
       ctx.beginPath();
@@ -229,10 +231,22 @@ export class Hud {
       ctx.lineTo(lineX1, y);
       ctx.stroke();
 
+      // beat-snap pending marker: hand has moved off the sounding band but
+      // the change hasn't hit the next 8th-note boundary yet — dim cyan tick
+      // on the pending line, distinct from the committed red one.
+      if (pending) {
+        ctx.strokeStyle = 'rgba(0,229,255,0.6)';
+        ctx.lineWidth = 2 * dpr;
+        ctx.beginPath();
+        ctx.moveTo(lineX0, y);
+        ctx.lineTo(lineX0 + (lineX1 - lineX0) * 0.4, y);
+        ctx.stroke();
+      }
+
       const noteFontPx = Math.max(11, Math.round(13 * dpr));
       ctx.font = `${noteFontPx}px "VT323", "Courier New", monospace`;
       ctx.textAlign = 'right';
-      ctx.fillStyle = active ? RED : DIM;
+      ctx.fillStyle = active ? RED : pending ? 'rgba(0,229,255,0.75)' : DIM;
       ctx.fillText(NOTE_NAMES[b], lineX1 + Math.round(20 * dpr), y - noteFontPx / 2);
     }
 

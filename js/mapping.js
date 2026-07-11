@@ -47,6 +47,11 @@ export class Mapper {
     this._frozen = false;
     this._prevBurstCount = 0;
 
+    // debug instrumentation (issue #20) — optional refs wired in by main.js
+    this.recorder = null; // Recorder instance, for encodeQueueSize
+    this.recordState = null; // { error, errorUntil } shared object from main.js
+    this._latencySamples = [];
+
     // octave-shift gesture state (left-hand index-point rising edge)
     this._octaveShift = 0; // -1 | 0 | +1
     this._octaveArmed = true; // re-armed only after leftIndexPoint returns to null
@@ -211,6 +216,20 @@ export class Mapper {
 
     this._handsPresent = anyHand;
 
+    // --- motion->sound latency estimate (proxy: gesture-result timestamp to
+    // this setTargetAtTime-driving tick; not a measurement of the real audio
+    // graph, no AudioParam read-back exists) ---
+    const latencyMs = this.tracker.lastResultTs != null
+      ? Math.max(0, nowMs - this.tracker.lastResultTs)
+      : null;
+    if (latencyMs != null) {
+      this._latencySamples.push(latencyMs);
+      if (this._latencySamples.length > 60) this._latencySamples.shift();
+    }
+    const latencyMaxMs = this._latencySamples.length
+      ? Math.max(...this._latencySamples)
+      : null;
+
     // --- build renderer state ---
     const beatPhase = this.engine.getBeatPhase();
     const rendererState = {
@@ -239,6 +258,11 @@ export class Mapper {
       recording: this.recording,
       trackingFps: this.tracker.trackingFps,
       stale: state.stale,
+      latencyMs,
+      latencyMaxMs,
+      encodeQueueSize: this.recorder ? this.recorder.encodeQueueSize : 0,
+      recordError: this.recordState ? this.recordState.error : null,
+      recordErrorUntil: this.recordState ? this.recordState.errorUntil : 0,
     };
 
     this.renderer.frame(dt, rendererState);

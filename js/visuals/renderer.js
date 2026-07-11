@@ -49,6 +49,7 @@ export class Renderer {
     this.mode = opts.mode === 'light' ? 'light' : 'full';
     this.cfg = MODES[this.mode];
     this.video = opts.video || null;
+    this.debug = !!opts.debug;
 
     const gl = glCanvas.getContext('webgl2', {
       antialias: false, alpha: false, depth: false,
@@ -685,6 +686,7 @@ export class Renderer {
 
     // ---- HUD ----------------------------------------------------------------
     const nowMs = performance.now();
+    if (state) state.debug = this.debug;
     this.hud.draw(state, this.fps, nowMs, {
       osdOn: this._osdOn,
       camOn: camActive,

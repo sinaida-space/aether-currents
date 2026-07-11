@@ -107,6 +107,19 @@ export class Hud {
     const osdRecActive = !!(osd && osd.osdOn && osd.camOn);
     if (s.recording && !osdRecActive) line('● REC', RED);
 
+    // Persistent recorder error line — shown regardless of ?debug, errors
+    // are never silent. Sticks for the caller-defined window (recordErrorUntil).
+    if (s.recordError && now < (s.recordErrorUntil || 0)) {
+      line('⚠ ' + s.recordError, RED);
+    }
+
+    // debug panel (?debug URL flag) — FPS/latency/encoder-queue instrumentation.
+    if (s.debug) {
+      line(`RENDER ${Math.round(fps || 0)}FPS  TRK ${Math.round(s.trackingFps || 0)}FPS`, CYAN);
+      line(`LATENCY ${Math.round(s.latencyMs || 0)}ms  (max ${Math.round(s.latencyMaxMs || 0)}ms)`, CYAN);
+      line(`ENC QUEUE ${s.encodeQueueSize ?? 0}`, CYAN);
+    }
+
     // centered SIGNAL LOST banner
     if (s.stale && blinkOn) {
       const banner = 'SIGNAL LOST — SHOW YOUR HANDS';

@@ -262,6 +262,7 @@ export class HandTracker {
     this._burstCount = 0;
 
     this._resultTimes = []; // rolling window for trackingFps
+    this.lastResultTs = null; // performance.now() timestamp of most recent result, for latency estimation
   }
 
   // MediaPipe runs on the main thread: tasks-vision's wasm loader calls
@@ -392,6 +393,7 @@ export class HandTracker {
     const t = msg.t;
     this._resultTimes.push(t);
     if (this._resultTimes.length > 30) this._resultTimes.shift();
+    this.lastResultTs = t;
 
     for (const hand of msg.hands) {
       const side = mapLabelToSide(hand.label);

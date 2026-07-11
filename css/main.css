@@ -764,24 +764,21 @@ body.legal-page {
   }
 }
 
-/* Non-blocking rotate hint — portrait phones only, never covers controls. */
-@media (max-width: 820px) and (orientation: portrait) {
-  body::after {
-    content: "\25b8 ROTATE FOR BEST EXPERIENCE";
-    position: fixed;
-    top: calc(0.5rem + env(safe-area-inset-top));
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 40;
-    pointer-events: none;
+/* Honest mobile expectation-setting on the welcome panel — hidden on desktop. */
+.mobile-notice {
+  display: none;
+}
+
+@media (max-width: 820px) {
+  .mobile-notice {
+    display: block;
+    margin: 0.4rem 0 0.8rem;
     color: var(--cyan);
     font-family: var(--font-mono);
     font-size: 0.7rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
+    letter-spacing: 0.03em;
     text-shadow: var(--glow-cyan);
     opacity: 0.85;
-    white-space: nowrap;
   }
 }
 

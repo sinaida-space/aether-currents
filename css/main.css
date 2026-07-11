@@ -95,8 +95,6 @@ a:focus {
   inset: 0;
   z-index: 10;
   display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 2rem 1rem;
   padding-top: calc(2rem + env(safe-area-inset-top));
   padding-bottom: calc(2rem + env(safe-area-inset-bottom));
@@ -124,6 +122,7 @@ a:focus {
 .welcome-panel {
   position: relative;
   z-index: 12;
+  margin: auto;
   max-width: 640px;
   width: 100%;
   border: 1px solid var(--red);
@@ -600,7 +599,7 @@ body.legal-page {
 #ascii-glyphs {
   position: absolute;
   inset: 0;
-  z-index: 13;
+  z-index: 11;
   pointer-events: none;
 }
 

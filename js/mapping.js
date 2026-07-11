@@ -4,9 +4,14 @@
 // never spam the audio thread's message/param queues.
 
 const EPS = 1e-3;
-const TAU = 0.05;
-const TAU_POSITION = 0.08;
-const TAU_PITCH = 0.08; // gooey portamento between quantized pitch bands
+const TAU = 0.04; // was 0.05 — trimmed for latency (task 5); still glitch-safe
+const TAU_POSITION = 0.06; // was 0.08 — trimmed for latency; playhead motion stays audibly smooth
+// Pitch portamento: quantized-band changes should feel like a note attack, not
+// a glide, so they get a much shorter time constant. Octave-shift transitions
+// (same band, different octave) keep the old gooey tau since a bare semitone
+// jump of 12 without any smoothing pops audibly.
+const TAU_PITCH_SNAP = 0.025; // band change — snap-fast (task 5 spec)
+const TAU_PITCH_GLIDE = 0.08; // same-band re-writes (octave shift) — original portamento
 
 // A minor pentatonic + octave, 6 quantized bands (semitone offsets).
 const SCALE = [0, 3, 5, 7, 10, 12];
@@ -95,12 +100,19 @@ export class Mapper {
     this.sampleName = name;
   }
 
-  _setParam(key, audioParamName, value) {
+  _setParam(key, audioParamName, value, tauOverride) {
     const last = this._last[key];
     if (last !== null && Math.abs(value - last) < EPS) return;
     this._last[key] = value;
     const p = this.params.get(audioParamName);
-    const tau = key === 'position' ? TAU_POSITION : key === 'pitch' ? TAU_PITCH : TAU;
+    const tau =
+      tauOverride !== undefined
+        ? tauOverride
+        : key === 'position'
+          ? TAU_POSITION
+          : key === 'pitch'
+            ? TAU_PITCH_GLIDE
+            : TAU;
     p.setTargetAtTime(value, this.ctx.currentTime, tau);
   }
 
@@ -157,10 +169,13 @@ export class Mapper {
       }
       const y = Math.max(0, Math.min(1, hands.right.y));
       const band = Math.min(5, Math.floor((1 - y) * 6)); // top(y=0)->band5 (highest)
+      const bandChanged = this._pitchBand !== null && band !== this._pitchBand;
       this._pitchBand = band;
       const semitones = SCALE[band] + 12 * this._octaveShift;
       const pitch = Math.max(0.25, Math.min(4, Math.pow(2, semitones / 12)));
-      this._setParam('pitch', 'pitch', pitch);
+      // Snap-fast on a band change (new note = attack), glide within the same
+      // band (octave-shift re-write only) to avoid an audible pop (task 5).
+      this._setParam('pitch', 'pitch', pitch, bandChanged ? TAU_PITCH_SNAP : TAU_PITCH_GLIDE);
 
       // --- chord (3 extended right-hand fingers -> perfect-5th alternation) ---
       this._setParam('chord', 'chord', gestures.chordOn ? 1 : 0);

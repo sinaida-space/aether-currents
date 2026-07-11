@@ -6,6 +6,11 @@
 const EPS = 1e-3;
 const TAU = 0.05;
 const TAU_POSITION = 0.08;
+const TAU_PITCH = 0.08; // gooey portamento between quantized pitch bands
+
+// A minor pentatonic + octave, 6 quantized bands (semitone offsets).
+const SCALE = [0, 3, 5, 7, 10, 12];
+const OCTAVE_COOLDOWN_MS = 600;
 
 // ---- exponential interpolation helpers ----------------------------------
 // lerp(a, b, t) in log-space: a * (b/a)^t
@@ -35,10 +40,17 @@ export class Mapper {
       filterCutoff: null,
       reverbMix: null,
       gain: null,
+      chord: null,
     };
 
     this._frozen = false;
     this._prevBurstCount = 0;
+
+    // octave-shift gesture state (left-hand index-point rising edge)
+    this._octaveShift = 0; // -1 | 0 | +1
+    this._octaveArmed = true; // re-armed only after leftIndexPoint returns to null
+    this._octaveCooldownUntil = 0;
+    this._pitchBand = null; // last computed band index, for HUD
 
     // held two-hand values (persist when only one hand present)
     this._heldCutoff = 8000;
@@ -78,7 +90,7 @@ export class Mapper {
     if (last !== null && Math.abs(value - last) < EPS) return;
     this._last[key] = value;
     const p = this.params.get(audioParamName);
-    const tau = key === 'position' ? TAU_POSITION : TAU;
+    const tau = key === 'position' ? TAU_POSITION : key === 'pitch' ? TAU_PITCH : TAU;
     p.setTargetAtTime(value, this.ctx.currentTime, tau);
   }
 
@@ -96,7 +108,20 @@ export class Mapper {
       this.engine.freeze(this._frozen);
     }
 
-    // --- position (right.x) + pitch (right.y, exponential) ---
+    // --- octave shift (left-hand index-point rising edge, 600ms cooldown) ---
+    // Re-arms only once leftIndexPoint returns to null, so a held point
+    // triggers one shift, not a repeat-fire.
+    const lip = gestures.leftIndexPoint;
+    if (lip == null) {
+      this._octaveArmed = true;
+    } else if (this._octaveArmed && nowMs >= this._octaveCooldownUntil) {
+      const delta = lip === 'up' ? 1 : -1;
+      this._octaveShift = Math.max(-1, Math.min(1, this._octaveShift + delta));
+      this._octaveCooldownUntil = nowMs + OCTAVE_COOLDOWN_MS;
+      this._octaveArmed = false;
+    }
+
+    // --- position (right.x) + quantized pitch band (right.y) ---
     // Freeze holds only the playhead position; pitch stays live so the
     // frozen cloud can still be bent (engine contract, issue #2).
     if (hands.right) {
@@ -105,8 +130,14 @@ export class Mapper {
         this._setParam('position', 'position', position);
       }
       const y = Math.max(0, Math.min(1, hands.right.y));
-      const pitch = Math.pow(2, 1 - 2 * y); // top(y=0)->2.0, mid(y=.5)->1.0, bottom(y=1)->0.5
+      const band = Math.min(5, Math.floor((1 - y) * 6)); // top(y=0)->band5 (highest)
+      this._pitchBand = band;
+      const semitones = SCALE[band] + 12 * this._octaveShift;
+      const pitch = Math.max(0.25, Math.min(4, Math.pow(2, semitones / 12)));
       this._setParam('pitch', 'pitch', pitch);
+
+      // --- chord (3 extended right-hand fingers -> perfect-5th alternation) ---
+      this._setParam('chord', 'chord', gestures.chordOn ? 1 : 0);
     }
 
     // --- grain size (right pinch, exponential 0.25s open -> 0.03s pinched) ---
@@ -160,12 +191,18 @@ export class Mapper {
     this._handsPresent = anyHand;
 
     // --- build renderer state ---
+    const beatPhase = this.engine.getBeatPhase();
     const rendererState = {
       hands,
       audio: {
         level: this.engine.getLevel(),
         centroid: this.engine.getCentroid(),
       },
+      octaveShift: this._octaveShift,
+      pitchBand: this._pitchBand,
+      chordOn: gestures.chordOn,
+      beatOn: this.engine.beatOn,
+      beatPhase,
       params: {
         position: this._last.position != null ? this._last.position : 0.25,
         pitch: this._last.pitch != null ? this._last.pitch : 1,

@@ -321,6 +321,10 @@ button.recommended:hover {
   display: flex;
 }
 
+#ui-bar .ui-declutter-hidden {
+  display: none !important;
+}
+
 #hud-status {
   position: fixed;
   top: calc(1rem + env(safe-area-inset-top));
@@ -464,6 +468,34 @@ body.legal-page {
   color: var(--dim);
   line-height: 1.5;
   margin: 0.5rem 0;
+}
+
+.declutter-list {
+  list-style: none;
+  margin: 0.75rem 0;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.declutter-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.25rem;
+  border-bottom: 1px dashed rgba(242, 242, 242, 0.15);
+  cursor: pointer;
+}
+
+.declutter-list input[type="checkbox"] {
+  accent-color: var(--red);
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+}
+
+#btn-declutter.active {
+  border-color: var(--cyan);
+  color: var(--cyan);
 }
 
 .attribution-notice {

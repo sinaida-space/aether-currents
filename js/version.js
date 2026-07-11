@@ -1,2 +1,2 @@
 // AETHER CURRENTS — single source of truth for the displayed version string.
-export const VERSION = '3.1.1';
+export const VERSION = '3.2.0';

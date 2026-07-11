@@ -352,6 +352,121 @@ btnHome.addEventListener('click', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Task 8 — UI declutter panel: per-button show/hide + MINIMAL preset.
+// Pure visibility toggle (display:none via a class) — buttons stay in the
+// DOM, their click handlers and keyboard shortcuts keep working when hidden.
+// ---------------------------------------------------------------------------
+
+const DECLUTTER_KEY = 'ac.declutter';
+
+// id -> { label, essential }. essential = kept visible by the MINIMAL preset.
+const DECLUTTER_ITEMS = [
+  { id: 'btn-home', label: 'MAIN SCREEN', essential: true },
+  { id: 'btn-fullscreen', label: 'FULLSCREEN', essential: true },
+  { id: 'btn-record', label: 'RECORD', essential: true },
+  { id: 'btn-samples', label: 'SAMPLES', essential: false },
+  { id: 'btn-bg', label: 'BACKGROUND', essential: false },
+  { id: 'btn-beat', label: 'BEAT', essential: false },
+  { id: 'btn-scale', label: 'SCALE/KEY', essential: false },
+];
+
+function loadDeclutterState() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(DECLUTTER_KEY) || '{}');
+    const state = {};
+    for (const item of DECLUTTER_ITEMS) {
+      state[item.id] = raw[item.id] !== false; // default visible
+    }
+    return state;
+  } catch {
+    const state = {};
+    for (const item of DECLUTTER_ITEMS) state[item.id] = true;
+    return state;
+  }
+}
+
+let declutterState = loadDeclutterState();
+
+function saveDeclutterState() {
+  localStorage.setItem(DECLUTTER_KEY, JSON.stringify(declutterState));
+}
+
+function applyDeclutterState() {
+  for (const item of DECLUTTER_ITEMS) {
+    const el = document.getElementById(item.id);
+    if (!el) continue;
+    el.classList.toggle('ui-declutter-hidden', declutterState[item.id] === false);
+  }
+}
+
+const btnDeclutter = document.getElementById('btn-declutter');
+const declutterPanel = document.getElementById('declutter-panel');
+const declutterList = document.getElementById('declutter-list');
+const btnMinimal = document.getElementById('btn-minimal');
+const btnDeclutterReset = document.getElementById('btn-declutter-reset');
+const btnCloseDeclutter = document.getElementById('btn-close-declutter');
+
+function renderDeclutterList() {
+  declutterList.innerHTML = '';
+  for (const item of DECLUTTER_ITEMS) {
+    const li = document.createElement('li');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = declutterState[item.id] !== false;
+    checkbox.addEventListener('change', () => {
+      declutterState[item.id] = checkbox.checked;
+      saveDeclutterState();
+      applyDeclutterState();
+    });
+    const labelText = document.createElement('span');
+    labelText.textContent = item.label;
+    li.appendChild(checkbox);
+    li.appendChild(labelText);
+    li.addEventListener('click', (e) => {
+      if (e.target === checkbox) return;
+      checkbox.checked = !checkbox.checked;
+      checkbox.dispatchEvent(new Event('change'));
+    });
+    declutterList.appendChild(li);
+  }
+}
+
+function openDeclutterPanel() {
+  renderDeclutterList();
+  declutterPanel.style.display = 'block';
+}
+
+function closeDeclutterPanel() {
+  declutterPanel.style.display = 'none';
+}
+
+btnDeclutter.addEventListener('click', () => {
+  if (declutterPanel.style.display === 'none') openDeclutterPanel();
+  else closeDeclutterPanel();
+});
+btnCloseDeclutter.addEventListener('click', closeDeclutterPanel);
+
+btnMinimal.addEventListener('click', () => {
+  for (const item of DECLUTTER_ITEMS) declutterState[item.id] = item.essential;
+  saveDeclutterState();
+  applyDeclutterState();
+  renderDeclutterList();
+});
+
+btnDeclutterReset.addEventListener('click', () => {
+  for (const item of DECLUTTER_ITEMS) declutterState[item.id] = true;
+  saveDeclutterState();
+  applyDeclutterState();
+  renderDeclutterList();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && declutterPanel.style.display !== 'none') closeDeclutterPanel();
+});
+
+applyDeclutterState();
+
+// ---------------------------------------------------------------------------
 // Task 5 — boot hook, mapping loop, sample menu, recorder.
 // ---------------------------------------------------------------------------
 

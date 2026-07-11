@@ -238,7 +238,7 @@ window.addEventListener('resize', () => {
   activeGlyphs = 0;
 });
 
-async function startWithMode(mode) {
+async function startWithMode(mode, audioContext) {
   pendingMode = mode;
   storeMode(mode);
   window.AC_MODE = mode;
@@ -259,7 +259,7 @@ async function startWithMode(mode) {
     uiBar.classList.add('visible');
 
     if (typeof window.__AC_BOOT === 'function') {
-      window.__AC_BOOT(mode);
+      window.__AC_BOOT(mode, audioContext);
     } else {
       hudStatus.textContent = 'modules loading — pipeline in progress';
     }
@@ -270,12 +270,23 @@ async function startWithMode(mode) {
   }
 }
 
-btnStartFull.addEventListener('click', () => startWithMode('full'));
-btnStartLight.addEventListener('click', () => startWithMode('light'));
+// iOS/Safari drop "user activation" across an awaited getUserMedia prompt, so
+// creating/resuming the AudioContext later inside __AC_BOOT silently fails to
+// unlock audio on mobile. Create + resume it synchronously in the click
+// handler itself, then hand it down through startWithMode → __AC_BOOT.
+function startWithModeFromGesture(mode) {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const audioContext = new AC();
+  audioContext.resume().catch(() => {});
+  startWithMode(mode, audioContext);
+}
+
+btnStartFull.addEventListener('click', () => startWithModeFromGesture('full'));
+btnStartLight.addEventListener('click', () => startWithModeFromGesture('light'));
 
 btnRetryCamera.addEventListener('click', () => {
   if (pendingMode) {
-    startWithMode(pendingMode);
+    startWithModeFromGesture(pendingMode);
   }
 });
 
@@ -377,11 +388,11 @@ function progressBar(frac) {
   return `LOADING VISION MODEL ${bar} ${pct}%`;
 }
 
-window.__AC_BOOT = async function __AC_BOOT(mode) {
+window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
   hudStatus.textContent = 'BOOTING AUDIO ENGINE...';
 
   const AC = window.AudioContext || window.webkitAudioContext;
-  const audioContext = new AC();
+  const audioContext = providedAudioContext || new AC();
   if (audioContext.state === 'suspended') {
     await audioContext.resume().catch(() => {});
   }

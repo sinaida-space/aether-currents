@@ -77,8 +77,8 @@ class BeatScheduler {
     this._step = 0; // 8th-note counter
     this._nextTime = 0; // audio-clock time of the next 8th note
     this._voices = []; // scheduled osc/source nodes pending stop
-    this._lookahead = 0.12; // seconds scheduled ahead
-    this._tick = 0.025; // scheduler wake interval (s)
+    this._lookahead = 0.35; // seconds scheduled ahead (stall-proof horizon)
+    this._tick = 0.05; // scheduler wake interval (s)
     this._sec8th = 60 / this.bpm / 2;
   }
 
@@ -101,10 +101,12 @@ class BeatScheduler {
       clearInterval(this._interval);
       this._interval = null;
     }
-    // Cancel any voices scheduled but not yet started.
+    // Cancel any voices scheduled but not yet started/still playing so the
+    // widened 0.35s lookahead doesn't leave beat audio hanging after BEAT off.
     const now = this.ctx.currentTime;
     for (const v of this._voices) {
       try { v.stop(now); } catch (_) { /* already stopped */ }
+      try { v.disconnect(); } catch (_) { /* already disconnected */ }
     }
     this._voices.length = 0;
     // Return the duck gain smoothly to unity.
@@ -115,7 +117,16 @@ class BeatScheduler {
   }
 
   _scheduler() {
-    const horizon = this.ctx.currentTime + this._lookahead;
+    const now = this.ctx.currentTime;
+    // Stall recovery: if a main-thread stall let _nextTime fall behind the
+    // audio clock, jump forward to the next grid point strictly in the
+    // future instead of machine-gunning every missed beat.
+    if (this._nextTime < now) {
+      const missed = Math.ceil((now - this._nextTime) / this._sec8th);
+      this._nextTime += missed * this._sec8th;
+      this._step += missed;
+    }
+    const horizon = now + this._lookahead;
     while (this._nextTime < horizon) {
       this._schedule(this._step, this._nextTime);
       this._nextTime += this._sec8th;
@@ -289,6 +300,12 @@ export class GranularEngine {
 
   freeze(on) {
     this.node.port.postMessage({ type: 'freeze', value: !!on });
+  }
+
+  // Chord mode: 'arp' (legacy alternating dyad) vs simultaneous (default).
+  // Latent — no UI/gesture wired yet (v3.2).
+  setChordMode(arp) {
+    this.node.port.postMessage({ type: 'chordMode', arp: !!arp });
   }
 
   // Fire a grain burst. When the beat runs, quantize the port message to the

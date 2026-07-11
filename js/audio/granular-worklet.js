@@ -45,6 +45,9 @@ class GranularProcessor extends AudioWorkletProcessor {
 
     // Chord alternation flag (perfect 5th). Flips each spawn while chord > 0.5.
     this._chordFlip = false;
+    // Chord mode: false (default) = simultaneous root+5th dyad; true = legacy
+    // per-spawn alternating arpeggio. Latent — no gesture wired yet (v3.2).
+    this._chordArp = false;
 
     // Grain pool — Structure-of-Arrays so no per-grain object is ever allocated.
     this._gActive = new Uint8Array(POOL);
@@ -112,6 +115,9 @@ class GranularProcessor extends AudioWorkletProcessor {
       }
       case 'freeze':
         this._frozen = !!msg.value;
+        break;
+      case 'chordMode':
+        this._chordArp = !!msg.arp;
         break;
       case 'burst':
         // 16 extra grains spread over ~150ms with a widened position spread.
@@ -207,14 +213,23 @@ class GranularProcessor extends AudioWorkletProcessor {
       this._nextGrain -= n;
       let guard = 0;
       while (this._nextGrain <= 0 && guard < 64) {
-        // Chord: alternate spawns between the base rate and a perfect 5th up.
-        let rate = pitch;
-        if (chordOn) {
+        let io = sampleRate / density; // inter-onset in samples
+        if (chordOn && this._chordArp) {
+          // Legacy latent mode: alternate spawns between root and perfect 5th.
+          let rate = pitch;
           if (this._chordFlip) rate = pitch * FIFTH;
           this._chordFlip = !this._chordFlip;
+          this._spawn(posNorm, spread, panW, durSamples, rate);
+        } else if (chordOn) {
+          // Default: simultaneous dyad — two grains at the same onset.
+          // Double the inter-onset increment so total grain throughput
+          // (CPU) matches the single-grain-per-onset case.
+          this._spawn(posNorm, spread, panW, durSamples, pitch);
+          this._spawn(posNorm, spread, panW, durSamples, pitch * FIFTH);
+          io *= 2;
+        } else {
+          this._spawn(posNorm, spread, panW, durSamples, pitch);
         }
-        this._spawn(posNorm, spread, panW, durSamples, rate);
-        const io = sampleRate / density; // inter-onset in samples
         this._nextGrain += io * (0.7 + Math.random() * 0.6); // ±30% humanization
         guard++;
       }

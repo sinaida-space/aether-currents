@@ -84,7 +84,7 @@ async function runProbeAndShowModes() {
 // ---------------------------------------------------------------------------
 
 const BOOT_LINES = [
-  { text: 'AETHER BIOS v2.1 — (C) SINAIDA SYSTEMS' },
+  { text: 'AETHER BIOS v3.1 — (C) SINAIDA SYSTEMS' },
   { memory: true },
   { text: 'AETHER SOUND DRIVER ........ OK' },
   { text: 'HAND TRACKING MODULE ....... OK' },
@@ -479,9 +479,16 @@ window.__AC_BOOT = async function __AC_BOOT(mode) {
       li.dataset.index = String(i);
       const isActive = activeIds.has(entry.id);
       if (isActive) li.classList.add('active');
-      const marker = isActive ? '▪ ' : '&nbsp;&nbsp;';
-      const keyHint = i < 10 ? `<span class="key-hint">[${i}]</span>` : '';
-      li.innerHTML = `${keyHint}${marker}${entry.name}`;
+      if (i < 10) {
+        const hint = document.createElement('span');
+        hint.className = 'key-hint';
+        hint.textContent = `[${i}]`;
+        li.appendChild(hint);
+      }
+      // textContent, not innerHTML: entry.name for uploads is the raw
+      // user-controlled filename.
+      const marker = isActive ? '▪ ' : '  ';
+      li.appendChild(document.createTextNode(marker + entry.name));
       li.addEventListener('click', () => toggleSample(entry.id));
       sampleList.appendChild(li);
     });

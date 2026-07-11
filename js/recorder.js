@@ -396,11 +396,13 @@ export class Recorder {
       audio: { codec: 'aac', numberOfChannels: 2, sampleRate: this.ctx.sampleRate },
       fastStart: 'in-memory',
       // Video's first VideoFrame timestamp and audio's first PCM-tap chunk
-      // timestamp are each independently zeroed against their own clocks
-      // (performance.now() vs. sample count) and won't land on the exact
-      // same instant — offset each track to its own first sample instead
-      // of requiring a hard zero.
-      firstTimestampBehavior: 'offset',
+      // timestamp are each zeroed against their own clocks (performance.now()
+      // vs. sample count) and won't land on the exact same instant — a hard
+      // zero ('strict') would throw. 'cross-track-offset' shifts both tracks
+      // by one shared offset, preserving true audio/video relative timing;
+      // plain 'offset' zeroes each track independently and silently eats any
+      // startup skew between them.
+      firstTimestampBehavior: 'cross-track-offset',
     });
     this._muxer = muxer;
 
@@ -480,7 +482,11 @@ export class Recorder {
     // which would silently stall both the webm capture and the MP4 encode
     // queue if the user tabs away mid-recording. setTimeout keeps drawing
     // at a steady ~60fps regardless of tab visibility.
+    // Drift-corrected: each tick is scheduled against an absolute timebase,
+    // so draw+encode execution time doesn't additively stack onto the period
+    // (tail-scheduling would sag below 60fps under FULL MODE + encode load).
     const FRAME_INTERVAL_MS = 1000 / 60;
+    let nextTick = performance.now() + FRAME_INTERVAL_MS;
     const draw = () => {
       if (!this.recording) return;
       const ctx = this._compositeCtx;
@@ -499,7 +505,10 @@ export class Recorder {
 
       if (this._useMp4) this._encodeVideoFrame();
 
-      this._compositeRaf = setTimeout(draw, FRAME_INTERVAL_MS);
+      nextTick += FRAME_INTERVAL_MS;
+      const now = performance.now();
+      if (nextTick < now) nextTick = now; // fell behind — skip, don't spiral
+      this._compositeRaf = setTimeout(draw, nextTick - now);
     };
     this._compositeRaf = setTimeout(draw, FRAME_INTERVAL_MS);
   }

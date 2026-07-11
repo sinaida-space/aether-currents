@@ -19,8 +19,9 @@ const GESTURE_LINES_NARROW = [
   'R-3FING:CHORD · L-3FING HOLD:CHORD/ARP',
 ];
 
-// A minor pentatonic + octave, 6 quantized bands — mirrors mapping.js SCALE.
-const NOTE_NAMES = ['A', 'C', 'D', 'E', 'G', 'A'];
+// Fallback note names (A minor pentatonic) — used only until the first
+// mapper frame supplies live noteNames for the active scale+key.
+const DEFAULT_NOTE_NAMES = ['A', 'C', 'D', 'E', 'G', 'A'];
 const BAND_COUNT = 6;
 
 function fmt2(x) {
@@ -235,10 +236,11 @@ export class Hud {
     const colW = Math.round(72 * dpr);
     const lineX0 = W - pad - colW;
     const lineX1 = W - pad - Math.round(28 * dpr);
-    const top = Math.round(70 * dpr);
+    const top = Math.round(90 * dpr);
     const bottom = bottomLine - Math.round(90 * dpr);
     const span = Math.max(1, bottom - top);
     const band = s.pitchBand;
+    const noteNames = (s.noteNames && s.noteNames.length === BAND_COUNT) ? s.noteNames : DEFAULT_NOTE_NAMES;
 
     ctx.save();
     ctx.shadowBlur = 0;
@@ -258,8 +260,17 @@ export class Hud {
       ctx.font = `${noteFontPx}px "VT323", "Courier New", monospace`;
       ctx.textAlign = 'right';
       ctx.fillStyle = active ? RED : DIM;
-      ctx.fillText(NOTE_NAMES[b], lineX1 + Math.round(20 * dpr), y - noteFontPx / 2);
+      ctx.fillText(noteNames[b], lineX1 + Math.round(20 * dpr), y - noteFontPx / 2);
     }
+
+    // scale + key label, above the band column (cycled via S / K keys, or the
+    // SCALE ui-bar button — see main.js).
+    const scaleFontPx = Math.max(11, Math.round(13 * dpr));
+    ctx.font = `${scaleFontPx}px "VT323", "Courier New", monospace`;
+    ctx.textAlign = 'right';
+    ctx.fillStyle = CYAN;
+    const scaleLabel = `${s.rootKeyName || 'A'} ${s.scaleLabel || 'MIN PENT'}`;
+    ctx.fillText(scaleLabel, lineX1 + Math.round(20 * dpr), top - scaleFontPx * 2 - Math.round(10 * dpr));
 
     // octave indicator, above the band column
     const oct = s.octaveShift || 0;

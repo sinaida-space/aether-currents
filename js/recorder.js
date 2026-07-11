@@ -152,29 +152,17 @@ function encodeWav(channelL, channelR, sampleRate, tags) {
 
 // ---- brand frame drawing ---------------------------------------------------
 
-function drawBrandFrame(ctx, w, h, modeLabel, dateStr) {
+function drawBrandFrame(ctx, w, h) {
+  // Border only — all text overlays (title, mode/date, watermark) live on
+  // the HUD canvas, which is the single source of truth composited above.
   const red = '#ff2a2a';
   ctx.save();
-  ctx.font = `${Math.round(h * 0.024)}px "VT323", monospace`;
-  ctx.textBaseline = 'top';
   ctx.shadowColor = red;
   ctx.shadowBlur = h * 0.006;
   ctx.strokeStyle = red;
   ctx.lineWidth = Math.max(1, Math.round(h * 0.0022));
   const margin = 12;
   ctx.strokeRect(margin, margin, w - margin * 2, h - margin * 2);
-
-  const pad = margin + 14;
-  ctx.fillStyle = red;
-  ctx.textAlign = 'left';
-  ctx.fillText('AETHER CURRENTS', pad, pad);
-
-  ctx.font = `${Math.round(h * 0.018)}px "VT323", monospace`;
-  ctx.textBaseline = 'bottom';
-  ctx.fillText(`${modeLabel} — ${dateStr}`, pad, h - pad);
-
-  ctx.textAlign = 'right';
-  ctx.fillText('sinaida.eu', w - pad, h - pad);
   ctx.restore();
 }
 
@@ -501,7 +489,7 @@ export class Recorder {
       // hud overlay (already alpha-transparent 2D canvas), stretched to fit
       ctx.drawImage(this.hudCanvas, 0, 0, cw, ch);
 
-      drawBrandFrame(ctx, cw, ch, this.modeLabel, isoDate(new Date()));
+      drawBrandFrame(ctx, cw, ch);
 
       if (this._useMp4) this._encodeVideoFrame();
 

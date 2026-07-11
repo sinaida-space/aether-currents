@@ -339,6 +339,7 @@ const hudCanvas = document.getElementById('hud-canvas');
 const btnRecord = document.getElementById('btn-record');
 const btnSamples = document.getElementById('btn-samples');
 const btnBg = document.getElementById('btn-bg');
+const btnBeat = document.getElementById('btn-beat');
 
 const BG_KEY = 'ac.bg';
 const OSD_KEY = 'ac.osd';
@@ -405,8 +406,21 @@ window.__AC_BOOT = async function __AC_BOOT(mode) {
 
   hudStatus.textContent = '';
 
+  // ---- sample layering state (multi-select, 1..4 active buffers) --------
+  // `library` grows in place as custom (upload/mic) entries are added, each
+  // tagged with a 'custom-' id prefix so eviction can prefer them over the
+  // built-in synths/voice sample.
+  const activeIds = new Set();
+  let activeOrder = []; // insertion order — activeOrder[0] drives the sampleName label
+
+  function isBuiltinId(id) {
+    return !id.startsWith('custom-');
+  }
+
   const defaultEntry = library.find((s) => s.id === 'drone') || library[0];
-  engine.setSample(defaultEntry.buffer);
+  activeIds.add(defaultEntry.id);
+  activeOrder.push(defaultEntry.id);
+  engine.setActiveSamples([defaultEntry.buffer]);
 
   const mapper = new Mapper({
     engine,
@@ -463,8 +477,12 @@ window.__AC_BOOT = async function __AC_BOOT(mode) {
     library.forEach((entry, i) => {
       const li = document.createElement('li');
       li.dataset.index = String(i);
-      li.innerHTML = `<span class="key-hint">[${i}]</span>${entry.name}`;
-      li.addEventListener('click', () => selectSample(i));
+      const isActive = activeIds.has(entry.id);
+      if (isActive) li.classList.add('active');
+      const marker = isActive ? '▪ ' : '&nbsp;&nbsp;';
+      const keyHint = i < 10 ? `<span class="key-hint">[${i}]</span>` : '';
+      li.innerHTML = `${keyHint}${marker}${entry.name}`;
+      li.addEventListener('click', () => toggleSample(entry.id));
       sampleList.appendChild(li);
     });
 
@@ -479,12 +497,56 @@ window.__AC_BOOT = async function __AC_BOOT(mode) {
     sampleList.appendChild(micLi);
   }
 
-  function selectSample(i) {
-    const entry = library[i];
-    if (!entry) return;
-    engine.setSample(entry.buffer);
-    mapper.setSampleName(entry.name);
-    closeSampleMenu();
+  function entryById(id) {
+    return library.find((e) => e.id === id) || null;
+  }
+
+  function applyActiveSamples() {
+    const buffers = [];
+    for (const id of activeOrder) {
+      const entry = entryById(id);
+      if (entry) buffers.push(entry.buffer);
+    }
+    engine.setActiveSamples(buffers);
+
+    const first = entryById(activeOrder[0]);
+    const extra = activeOrder.length - 1;
+    mapper.setSampleName(first ? (extra > 0 ? `${first.name} +${extra}` : first.name) : '—');
+
+    renderSampleList();
+  }
+
+  // Evict the oldest custom (non-built-in) active entry to make room, or the
+  // oldest entry overall if every active slot is built-in.
+  function evictOldestForCap() {
+    let idx = activeOrder.findIndex((id) => !isBuiltinId(id));
+    if (idx === -1) idx = 0;
+    const evictId = activeOrder[idx];
+    activeIds.delete(evictId);
+    activeOrder.splice(idx, 1);
+  }
+
+  function toggleSample(id) {
+    if (activeIds.has(id)) {
+      if (activeIds.size <= 1) return; // keep at least one active sample
+      activeIds.delete(id);
+      activeOrder = activeOrder.filter((x) => x !== id);
+    } else {
+      if (activeIds.size >= 4) evictOldestForCap();
+      activeIds.add(id);
+      activeOrder.push(id);
+    }
+    applyActiveSamples();
+  }
+
+  // Upload/mic ADD as a new toggled-on entry (never replace); cap 4, evict
+  // oldest non-built-in if the set is already full.
+  function addCustomEntry(entry) {
+    library.push(entry);
+    if (activeIds.size >= 4) evictOldestForCap();
+    activeIds.add(entry.id);
+    activeOrder.push(entry.id);
+    applyActiveSamples();
   }
 
   function openSampleMenu() {
@@ -509,8 +571,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode) {
     try {
       const buffer = await loadUserFile(audioContext, file);
       const name = file.name.replace(/\.[^.]+$/, '').toUpperCase().slice(0, 24);
-      engine.setSample(buffer);
-      mapper.setSampleName(name || 'UPLOADED');
+      addCustomEntry({ id: `custom-${Date.now()}`, name: name || 'UPLOADED', buffer });
       closeSampleMenu();
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -528,8 +589,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode) {
     micCountdownNum.textContent = '●REC';
     try {
       const buffer = await captureMic(audioContext, 4);
-      engine.setSample(buffer);
-      mapper.setSampleName('MIC CAPTURE');
+      addCustomEntry({ id: `custom-${Date.now()}`, name: 'MIC CAPTURE', buffer });
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[AETHER CURRENTS] mic capture failed:', err);
@@ -548,7 +608,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode) {
     }
     if (/^[0-9]$/.test(e.key)) {
       const i = Number(e.key);
-      if (library[i]) selectSample(i);
+      if (library[i]) toggleSample(library[i].id);
       return;
     }
     if (e.key === 'v' || e.key === 'V') {
@@ -557,7 +617,25 @@ window.__AC_BOOT = async function __AC_BOOT(mode) {
     if (e.key === 't' || e.key === 'T') {
       setOsd(!osdOn);
     }
+    if (e.key === 'b' || e.key === 'B') {
+      toggleBeat();
+    }
   });
+
+  // ---- BEAT toggle ----------------------------------------------------------
+
+  function updateBeatButton() {
+    const bpm = Math.round(engine.getBeatPhase().bpm);
+    btnBeat.textContent = engine.beatOn ? `▪ BEAT ${bpm}` : '▸ BEAT';
+  }
+
+  function toggleBeat() {
+    engine.setBeat(!engine.beatOn);
+    updateBeatButton();
+  }
+
+  btnBeat.addEventListener('click', toggleBeat);
+  updateBeatButton();
 
   // ---- recorder -----------------------------------------------------------
 

@@ -101,6 +101,16 @@ class HandFilterBank {
     this.lastPalmOpen = 0;
     this.lastPalmOpenT = null;
 
+    // extended-finger count (chord gesture) — streak-debounced (4 frames).
+    this.fingerCountCandidate = 0;
+    this.fingerCountStreak = 0;
+    this.fingerCountPersisted = 0;
+
+    // left-hand index-point direction (octave gesture) — streak-debounced.
+    this.indexPointCandidate = null;
+    this.indexPointStreak = 0;
+    this.indexPointPersisted = null;
+
     this.lastSeenT = -Infinity;
   }
 }
@@ -113,6 +123,12 @@ function dist3(ax, ay, az, bx, by, bz) {
   const dz = az - bz;
   return Math.sqrt(dx * dx + dy * dy + dz * dz);
 }
+
+// Extended-finger thresholds: tip-distance-from-palm-center / scale.
+const FINGER_EXT_THRESH = 1.0;
+const THUMB_EXT_THRESH = 0.65; // thumb sits closer to palm center even when extended
+// Index-point (octave gesture) up/down margin, in scale units.
+const INDEX_POINT_MARGIN = 0.35;
 
 function computeRawFeatures(lm) {
   // lm: Float32Array(63), already mirrored, NOT yet smoothed (smoothing
@@ -161,7 +177,33 @@ function computeRawFeatures(lm) {
     scale;
   const pinch = clamp01(1 - (pinchDist - 0.15) / (1.1 - 0.15));
 
-  return { fist, palmOpen, pinch, scale };
+  // ---- extended-finger count (chord gesture) + index-point (octave gesture) ----
+  const indexD = dist3(lm[8 * 3], lm[8 * 3 + 1], lm[8 * 3 + 2], cx, cy, cz) / scale;
+  const middleD = dist3(lm[12 * 3], lm[12 * 3 + 1], lm[12 * 3 + 2], cx, cy, cz) / scale;
+  const ringD = dist3(lm[16 * 3], lm[16 * 3 + 1], lm[16 * 3 + 2], cx, cy, cz) / scale;
+  const pinkyD = dist3(lm[20 * 3], lm[20 * 3 + 1], lm[20 * 3 + 2], cx, cy, cz) / scale;
+  const thumbD = dist3(lm[4 * 3], lm[4 * 3 + 1], lm[4 * 3 + 2], cx, cy, cz) / scale;
+
+  const indexExt = indexD > FINGER_EXT_THRESH;
+  const middleExt = middleD > FINGER_EXT_THRESH;
+  const ringExt = ringD > FINGER_EXT_THRESH;
+  const pinkyExt = pinkyD > FINGER_EXT_THRESH;
+  const thumbExt = thumbD > THUMB_EXT_THRESH;
+
+  const fingerCount =
+    (indexExt ? 1 : 0) + (middleExt ? 1 : 0) + (ringExt ? 1 : 0) +
+    (pinkyExt ? 1 : 0) + (thumbExt ? 1 : 0);
+
+  // Index-point direction: index extended alone (middle/ring/pinky curled),
+  // direction from index tip y vs index MCP (landmark 5) y, scale-normalized.
+  let indexPointDir = null;
+  if (indexExt && !middleExt && !ringExt && !pinkyExt) {
+    const dy = (lm[8 * 3 + 1] - lm[5 * 3 + 1]) / scale;
+    if (dy < -INDEX_POINT_MARGIN) indexPointDir = 'up';
+    else if (dy > INDEX_POINT_MARGIN) indexPointDir = 'down';
+  }
+
+  return { fist, palmOpen, pinch, scale, fingerCount, indexPointDir };
 }
 
 function clamp01(v) {
@@ -397,6 +439,8 @@ export class HandTracker {
 
       // burst edge detection (new-snapshot events only)
       this._updateBurstState(bank, fist, palmOpen, t);
+      this._updateFingerCountState(bank, feats.fingerCount);
+      this._updateIndexPointState(bank, feats.indexPointDir);
 
       this._latest.hands[side] = {
         x: px,
@@ -469,6 +513,32 @@ export class HandTracker {
     }
   }
 
+  // Generic 4-frame streak debounce for the chord finger-count gesture.
+  _updateFingerCountState(bank, raw) {
+    if (raw === bank.fingerCountCandidate) {
+      bank.fingerCountStreak++;
+    } else {
+      bank.fingerCountCandidate = raw;
+      bank.fingerCountStreak = 1;
+    }
+    if (bank.fingerCountStreak >= 4) {
+      bank.fingerCountPersisted = bank.fingerCountCandidate;
+    }
+  }
+
+  // Generic 4-frame streak debounce for the left-hand index-point gesture.
+  _updateIndexPointState(bank, raw) {
+    if (raw === bank.indexPointCandidate) {
+      bank.indexPointStreak++;
+    } else {
+      bank.indexPointCandidate = raw;
+      bank.indexPointStreak = 1;
+    }
+    if (bank.indexPointStreak >= 4) {
+      bank.indexPointPersisted = bank.indexPointCandidate;
+    }
+  }
+
   _updateFreeze() {
     const leftOn = this._banks.left.fistAbove;
     const rightOn = this._banks.right.fistAbove;
@@ -495,6 +565,16 @@ export class HandTracker {
         bank.aboveStreak = 0;
         bank.belowStreak = 0;
       }
+      // chord/index-point gestures reset the same way — a lost hand can't
+      // hold a finger-count or point-direction state.
+      if (sinceSeen > 300) {
+        bank.fingerCountPersisted = 0;
+        bank.fingerCountCandidate = 0;
+        bank.fingerCountStreak = 0;
+        bank.indexPointPersisted = null;
+        bank.indexPointCandidate = null;
+        bank.indexPointStreak = 0;
+      }
     }
     this._updateFreeze();
 
@@ -516,6 +596,9 @@ export class HandTracker {
         burstCount: this._burstCount,
         pinch: rightPinch,
         twoHandDistance,
+        rightFingerCount: this._banks.right.fingerCountPersisted,
+        chordOn: this._banks.right.fingerCountPersisted === 3,
+        leftIndexPoint: this._banks.left.indexPointPersisted,
       },
     };
   }

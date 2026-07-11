@@ -58,6 +58,97 @@ export class Renderer {
     if (!gl) throw new Error('WebGL2 unavailable');
     this.gl = gl;
 
+    // context-loss / recovery (issue #21). A GPU reset (device loss, tab
+    // backgrounding, OOM) fires 'webglcontextlost'; preventDefault() tells the
+    // browser we intend to recover, otherwise the context is gone for good.
+    // frame() no-ops all GL work while lost so a reset never throws into the
+    // rAF loop — the mapper keeps ticking so audio is never interrupted.
+    // 'webglcontextrestored' rebuilds every GPU resource and resumes.
+    this.contextLost = false;
+    this.lossCount = 0;
+    this._lossTimestamps = []; // ms timestamps, for the "repeated loss" HUD offer
+    this._onContextLost = (e) => {
+      e.preventDefault();
+      this.contextLost = true;
+      this.lossCount++;
+      this._lossTimestamps.push(performance.now());
+      // eslint-disable-next-line no-console
+      console.error('[AETHER CURRENTS] WebGL context lost (#' + this.lossCount + ')');
+    };
+    this._onContextRestored = () => {
+      // eslint-disable-next-line no-console
+      console.info('[AETHER CURRENTS] WebGL context restored — rebuilding pipeline');
+      try {
+        this._buildGPUResources();
+        this.resize();
+      } finally {
+        this.contextLost = false;
+      }
+    };
+    glCanvas.addEventListener('webglcontextlost', this._onContextLost, false);
+    glCanvas.addEventListener('webglcontextrestored', this._onContextRestored, false);
+
+    // glitch scheduler state (zero per-frame allocation)
+    this._glitchActive = false;
+    this._glitchType = 0;
+    this._glitchT0 = 0;
+    this._glitchDur = 0;
+    this._glitchSeed = 0;
+    this._glitchProg = 0;
+    this._nextGlitchAt = 0;
+    this._audioPrevLevel = 0;
+    this._audioCooldown = 0;
+    this._motionEMA = new Float32Array(2);
+
+    // camcorder OSD state (hud reads these via the object passed to draw)
+    this._camEnabledAt = 0;
+    this._osdOn = true;
+
+    // preallocated uniform scratch (no per-frame allocation)
+    this._landmarks = new Float32Array(84); // 42 * vec2
+    this._handPresent = new Float32Array(2);
+    this._attract = new Float32Array(2);
+    this._radius = new Float32Array(2);
+    this._handVelL = new Float32Array(2);
+    this._handVelR = new Float32Array(2);
+    this._burst = new Float32Array(3);
+
+    // dynamic sim / burst state
+    this.time = 0;
+    this._prevBurst = 0;
+    this._burstTimer = 0;
+    this._burstFlash = 0;
+
+    // fps (EMA of true frame interval)
+    this.fps = 0;
+    this._fpsEMA = 0;
+
+    this.hud = new Hud(hudCanvas);
+
+    // screen-space render targets (created in resize)
+    this.sceneTex = null; this.sceneFBO = null;
+    this.fbTex = [null, null]; this.fbFBO = [null, null]; this.fbIndex = 0;
+    this.bloomTex = [null, null]; this.bloomFBO = [null, null];
+    this.rw = 0; this.rh = 0; this.bw = 0; this.bh = 0;
+
+    // everything below creates GL objects (programs, textures, FBOs, sim
+    // buffers) — pulled into a method so contextrestored can redo it verbatim.
+    this._buildGPUResources();
+
+    gl.disable(gl.DEPTH_TEST);
+    gl.clearColor(0, 0, 0, 1);
+
+    this.resize();
+  }
+
+  // (Re)creates every GPU-side resource: programs/uniform locs, the shared
+  // VAO, the cam/prev-cam textures, the glyph atlas, and the sim ping-pong.
+  // Called once from the constructor and again on 'webglcontextrestored' —
+  // after a context loss all previous handles are invalid, so this must not
+  // assume anything from a prior run still exists.
+  _buildGPUResources() {
+    const gl = this.gl;
+
     // float render targets where possible, RGBA8 fallback otherwise
     const floatExt = gl.getExtension('EXT_color_buffer_float');
     gl.getExtension('OES_texture_float_linear');       // best-effort linear filtering
@@ -135,58 +226,10 @@ export class Renderer {
     // glyph atlas for asciiDisplace (built once from an offscreen 2D canvas)
     this._buildGlyphAtlas();
 
-    // glitch scheduler state (zero per-frame allocation)
-    this._glitchActive = false;
-    this._glitchType = 0;
-    this._glitchT0 = 0;
-    this._glitchDur = 0;
-    this._glitchSeed = 0;
-    this._glitchProg = 0;
-    this._nextGlitchAt = 0;
-    this._audioPrevLevel = 0;
-    this._audioCooldown = 0;
-    this._motionEMA = new Float32Array(2);
-
-    // camcorder OSD state (hud reads these via the object passed to draw)
-    this._camEnabledAt = 0;
-    this._osdOn = true;
-
     // simulation state (fixed size, never reallocated on resize)
     this.simSize = this.cfg.simSize;
     this.particleCount = this.simSize * this.simSize;
     this._initSim();
-
-    // screen-space render targets (created in resize)
-    this.sceneTex = null; this.sceneFBO = null;
-    this.fbTex = [null, null]; this.fbFBO = [null, null]; this.fbIndex = 0;
-    this.bloomTex = [null, null]; this.bloomFBO = [null, null];
-    this.rw = 0; this.rh = 0; this.bw = 0; this.bh = 0;
-
-    // preallocated uniform scratch (no per-frame allocation)
-    this._landmarks = new Float32Array(84); // 42 * vec2
-    this._handPresent = new Float32Array(2);
-    this._attract = new Float32Array(2);
-    this._radius = new Float32Array(2);
-    this._handVelL = new Float32Array(2);
-    this._handVelR = new Float32Array(2);
-    this._burst = new Float32Array(3);
-
-    // dynamic sim / burst state
-    this.time = 0;
-    this._prevBurst = 0;
-    this._burstTimer = 0;
-    this._burstFlash = 0;
-
-    // fps (EMA of true frame interval)
-    this.fps = 0;
-    this._fpsEMA = 0;
-
-    this.hud = new Hud(hudCanvas);
-
-    gl.disable(gl.DEPTH_TEST);
-    gl.clearColor(0, 0, 0, 1);
-
-    this.resize();
   }
 
   _locs(prog, names) {
@@ -487,9 +530,28 @@ export class Renderer {
   }
 
   frame(dt, state) {
-    const gl = this.gl;
     dt = Math.min(dt || 0.016, 0.033);
     this.time += dt;
+
+    // Context lost: skip every GL call (they'd be no-ops at best, and some
+    // getters return stale/garbage state that trips our own assertions) but
+    // keep painting the 2D HUD so the "recovering" notice stays visible and
+    // the rAF loop (which also drives audio mapping) never stalls.
+    if (this.contextLost) {
+      this.fps = 0;
+      const nowMs = performance.now();
+      this.hud.draw(state, 0, nowMs, {
+        osdOn: this._osdOn,
+        camOn: false,
+        camMs: 0,
+        glLost: true,
+        glLossCount: this.lossCount,
+        glLossRepeated: this.lossCount > 1,
+      });
+      return;
+    }
+
+    const gl = this.gl;
 
     // fps EMA on true interval
     const inst = 1 / dt;
@@ -691,6 +753,26 @@ export class Renderer {
       osdOn: this._osdOn,
       camOn: camActive,
       camMs: this._camEnabledAt ? nowMs - this._camEnabledAt : 0,
+      glLost: false,
+      glLossCount: this.lossCount,
+      // keep offering the LIGHT-mode switch for a while after recovery too,
+      // not just during the outage — repeated loss is a standing problem.
+      glLossRepeated: this.lossCount > 1 && (nowMs - (this._lossTimestamps[this._lossTimestamps.length - 1] || 0)) < 30000,
     });
+  }
+
+  // Runtime switch to LIGHT rendering (offered from the HUD after repeated
+  // context loss — see issue #21). Rebuilds the sim at the new resolution and
+  // re-derives screen-space targets; safe to call only while the context is
+  // alive (contextLost guards the caller in main.js).
+  setMode(mode) {
+    const next = mode === 'light' ? 'light' : 'full';
+    if (next === this.mode || this.contextLost) return;
+    this.mode = next;
+    this.cfg = MODES[next];
+    this.simSize = this.cfg.simSize;
+    this.particleCount = this.simSize * this.simSize;
+    this._initSim();
+    this.resize();
   }
 }

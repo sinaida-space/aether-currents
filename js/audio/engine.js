@@ -61,6 +61,128 @@ async function makeImpulse(audioContext) {
   return await off.startRendering();
 }
 
+// Internal four-on-the-floor beat with sidechain pump. Standard main-thread
+// lookahead scheduler: a setInterval tick schedules audio events ~120ms ahead
+// on the sample-accurate audio clock. Kick on every beat, hat on offbeat 8ths.
+class BeatScheduler {
+  constructor(ctx, output, duck, noise) {
+    this.ctx = ctx;
+    this.output = output; // kick/hat route here (un-ducked)
+    this.duck = duck; // sidechain target
+    this.noise = noise; // precomputed hi-hat noise buffer
+    this.bpm = 116;
+    this.running = false;
+    this.startTime = 0;
+    this._interval = null;
+    this._step = 0; // 8th-note counter
+    this._nextTime = 0; // audio-clock time of the next 8th note
+    this._voices = []; // scheduled osc/source nodes pending stop
+    this._lookahead = 0.12; // seconds scheduled ahead
+    this._tick = 0.025; // scheduler wake interval (s)
+    this._sec8th = 60 / this.bpm / 2;
+  }
+
+  start() {
+    if (this.running) return;
+    this.running = true;
+    this._step = 0;
+    this._voices.length = 0;
+    // Align the grid a hair into the future so the first kick isn't clipped.
+    this.startTime = this.ctx.currentTime + 0.06;
+    this._nextTime = this.startTime;
+    this._scheduler();
+    this._interval = setInterval(() => this._scheduler(), this._tick * 1000);
+  }
+
+  stop() {
+    if (!this.running) return;
+    this.running = false;
+    if (this._interval !== null) {
+      clearInterval(this._interval);
+      this._interval = null;
+    }
+    // Cancel any voices scheduled but not yet started.
+    const now = this.ctx.currentTime;
+    for (const v of this._voices) {
+      try { v.stop(now); } catch (_) { /* already stopped */ }
+    }
+    this._voices.length = 0;
+    // Return the duck gain smoothly to unity.
+    const g = this.duck.gain;
+    g.cancelScheduledValues(now);
+    g.setValueAtTime(g.value, now);
+    g.setTargetAtTime(1, now, 0.05);
+  }
+
+  _scheduler() {
+    const horizon = this.ctx.currentTime + this._lookahead;
+    while (this._nextTime < horizon) {
+      this._schedule(this._step, this._nextTime);
+      this._nextTime += this._sec8th;
+      this._step++;
+    }
+  }
+
+  _schedule(step, t) {
+    if ((step & 1) === 0) {
+      this._kick(t);
+      this._sidechain(t);
+    } else {
+      this._hat(t);
+    }
+  }
+
+  _kick(t) {
+    const ctx = this.ctx;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(150, t);
+    osc.frequency.exponentialRampToValueAtTime(45, t + 0.06);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.9, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+    osc.connect(g).connect(this.output);
+    osc.start(t);
+    osc.stop(t + 0.3);
+    this._track(osc);
+  }
+
+  _hat(t) {
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.playbackRate.value = 0.95 + Math.random() * 0.1;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 7000;
+    const g = ctx.createGain();
+    const peak = 0.9 * Math.pow(10, -12 / 20); // -12 dB vs kick
+    g.gain.setValueAtTime(peak, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+    src.connect(hp).connect(g).connect(this.output);
+    src.start(t);
+    src.stop(t + 0.06);
+    this._track(src);
+  }
+
+  _sidechain(t) {
+    const g = this.duck.gain;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(1, t);
+    g.linearRampToValueAtTime(0.4, t + 0.02);
+    g.setTargetAtTime(1, t + 0.06, 0.12);
+  }
+
+  // Track a scheduled voice so stop() can cancel it; self-prune on end.
+  _track(node) {
+    this._voices.push(node);
+    node.onended = () => {
+      const i = this._voices.indexOf(node);
+      if (i >= 0) this._voices.splice(i, 1);
+    };
+  }
+}
+
 export class GranularEngine {
   static async create(audioContext) {
     const eng = new GranularEngine();
@@ -91,9 +213,16 @@ export class GranularEngine {
     output.gain.value = 1;
     eng.output = output;
 
-    // Graph: node -> dry -> output ; node -> convolver -> wet -> output
-    node.connect(dry).connect(output);
-    node.connect(convolver).connect(wet).connect(output);
+    // Sidechain duck bus: the granular dry+wet signal passes through `duck`
+    // before `output`, so the beat scheduler can pump it under each kick.
+    // The kick/hat voices connect to `output` directly and are NOT ducked.
+    const duck = audioContext.createGain();
+    duck.gain.value = 1;
+    eng._duck = duck;
+
+    // Graph: node -> dry -> duck -> output ; node -> convolver -> wet -> duck -> output
+    node.connect(dry).connect(duck).connect(output);
+    node.connect(convolver).connect(wet).connect(duck);
 
     // Analyser tap on output, then out to speakers.
     const analyser = audioContext.createAnalyser();
@@ -108,11 +237,21 @@ export class GranularEngine {
     eng._freqBuf = new Uint8Array(analyser.frequencyBinCount);
     eng._level = 0;
 
+    // Precomputed noise buffer for hi-hats (0.2s mono white noise, reused per hit).
+    const nlen = Math.ceil(0.2 * audioContext.sampleRate);
+    const noise = audioContext.createBuffer(1, nlen, audioContext.sampleRate);
+    const nd = noise.getChannelData(0);
+    for (let i = 0; i < nlen; i++) nd[i] = Math.random() * 2 - 1;
+    eng._hatNoise = noise;
+
+    // Internal beat scheduler (kick + hat + sidechain). Off until setBeat(true).
+    eng._beat = new BeatScheduler(audioContext, output, duck, noise);
+
     return eng;
   }
 
-  // --- Sample loading: downmix to mono Float32Array and transfer to the worklet ---
-  setSample(audioBuffer) {
+  // Downmix an AudioBuffer to a fresh mono Float32Array.
+  _downmix(audioBuffer) {
     const ch = audioBuffer.numberOfChannels;
     const len = audioBuffer.length;
     const mono = new Float32Array(len);
@@ -124,15 +263,70 @@ export class GranularEngine {
         for (let i = 0; i < len; i++) mono[i] += d[i] / ch;
       }
     }
+    return mono;
+  }
+
+  // --- Sample loading: downmix to mono Float32Array and transfer to the worklet ---
+  setSample(audioBuffer) {
+    const mono = this._downmix(audioBuffer);
     this.node.port.postMessage({ type: 'setSample', buffer: mono }, [mono.buffer]);
+  }
+
+  // Set the active granular set (1..4 AudioBuffers). Each is downmixed to mono
+  // and transferred; the worklet interleaves grains across the set.
+  setActiveSamples(audioBuffers) {
+    const list = Array.isArray(audioBuffers) ? audioBuffers : [audioBuffers];
+    const buffers = [];
+    const transfer = [];
+    for (let i = 0; i < list.length && buffers.length < 4; i++) {
+      if (!list[i]) continue;
+      const mono = this._downmix(list[i]);
+      buffers.push(mono);
+      transfer.push(mono.buffer);
+    }
+    this.node.port.postMessage({ type: 'setSamples', buffers }, transfer);
   }
 
   freeze(on) {
     this.node.port.postMessage({ type: 'freeze', value: !!on });
   }
 
+  // Fire a grain burst. When the beat runs, quantize the port message to the
+  // next 8th-note grid point (grain spawning tolerates the small setTimeout jitter).
   burst() {
-    this.node.port.postMessage({ type: 'burst' });
+    const beat = this._beat;
+    if (beat && beat.running) {
+      const now = this.ctx.currentTime;
+      const sec8th = 60 / beat.bpm / 2;
+      const elapsed = now - beat.startTime;
+      const nextGrid = Math.ceil(elapsed / sec8th) * sec8th + beat.startTime;
+      const deltaMs = Math.max(0, nextGrid - now) * 1000;
+      setTimeout(() => this.node.port.postMessage({ type: 'burst' }), deltaMs);
+    } else {
+      this.node.port.postMessage({ type: 'burst' });
+    }
+  }
+
+  // --- Beat backbone (four-on-the-floor + sidechain) ---
+  setBeat(on) {
+    if (on) this._beat.start();
+    else this._beat.stop();
+  }
+  get beatOn() {
+    return this._beat ? this._beat.running : false;
+  }
+
+  // Beat clock for visuals/HUD, derived from the audio clock.
+  getBeatPhase() {
+    const beat = this._beat;
+    const bpm = beat ? beat.bpm : 116;
+    if (!beat || !beat.running) return { bpm, phase: 0, beatIndex: 0 };
+    const spb = 60 / bpm;
+    const elapsed = this.ctx.currentTime - beat.startTime;
+    if (elapsed <= 0) return { bpm, phase: 0, beatIndex: 0 };
+    const beats = elapsed / spb;
+    const beatIndex = Math.floor(beats);
+    return { bpm, phase: beats - beatIndex, beatIndex };
   }
 
   // Reverb wet-send amount (0..1). Smoothed to stay zipper-free.

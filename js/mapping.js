@@ -55,7 +55,13 @@ export class Mapper {
     this._chordArp = false; // false = simultaneous dyad, true = legacy alternating arpeggio
     this._chordArpArmed = true; // re-armed only once left 3-finger pose releases
     this._chordArpHoldSince = null;
-    this._pitchBand = null; // last computed band index, for HUD
+    this._pitchBand = null; // committed/sounding band index, for HUD
+
+    // beat-snap pitch state (task 7): while engine.beatOn, band changes hold
+    // until the next 8th-note boundary, then commit the latest band seen.
+    this._committedBand = null; // band currently written to the audio param
+    this._pendingBand = null; // latest band the hand has moved to since last commit
+    this._last8thIndex = null; // absolute 8th-note grid index, to detect boundary crossings
 
     // held two-hand values (persist when only one hand present)
     this._heldCutoff = 8000;
@@ -152,8 +158,32 @@ export class Mapper {
       }
       const y = Math.max(0, Math.min(1, hands.right.y));
       const band = Math.min(5, Math.floor((1 - y) * 6)); // top(y=0)->band5 (highest)
-      this._pitchBand = band;
-      const semitones = SCALE[band] + 12 * this._octaveShift;
+
+      if (!this.engine.beatOn) {
+        // free-running (task 5 snap-fast behavior): band commits instantly.
+        this._committedBand = band;
+        this._pendingBand = null;
+        this._last8thIndex = null; // re-init cleanly if BEAT re-engages later
+      } else {
+        this._pendingBand = band;
+        if (this._committedBand == null) this._committedBand = band; // first frame under BEAT
+        const bp = this.engine.getBeatPhase(); // { bpm, phase (0..1 within beat), beatIndex }
+        const phase = bp && bp.phase != null ? bp.phase : 0;
+        const beatIndex = bp && bp.beatIndex != null ? bp.beatIndex : 0;
+        // 8 subdivisions/beat -> absolute 8th-note grid index since beat start.
+        const idx8 = beatIndex * 8 + Math.floor(phase * 8 + 1e-9);
+        if (this._last8thIndex == null) {
+          // Just started tracking (BEAT freshly on, or first tick) — don't
+          // force a commit mid-gesture; wait for the next real boundary.
+          this._last8thIndex = idx8;
+        } else if (idx8 !== this._last8thIndex) {
+          this._last8thIndex = idx8;
+          this._committedBand = this._pendingBand; // commit the latest band seen
+        }
+      }
+
+      this._pitchBand = this._committedBand; // HUD: committed/sounding band
+      const semitones = SCALE[this._committedBand] + 12 * this._octaveShift;
       const pitch = Math.max(0.25, Math.min(4, Math.pow(2, semitones / 12)));
       this._setParam('pitch', 'pitch', pitch);
 
@@ -221,6 +251,10 @@ export class Mapper {
       },
       octaveShift: this._octaveShift,
       pitchBand: this._pitchBand,
+      pendingPitchBand:
+        this.engine.beatOn && this._pendingBand != null && this._pendingBand !== this._committedBand
+          ? this._pendingBand
+          : null,
       chordOn: gestures.chordOn,
       chordArp: this._chordArp,
       beatOn: this.engine.beatOn,

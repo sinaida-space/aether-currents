@@ -681,6 +681,12 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     if (e.key === '[' || e.key === ']') {
       nudgeBpm(e.key === ']' ? 5 : -5);
     }
+    // GPU-bulletproofing (issue #21): once WebGL context loss has repeated,
+    // the HUD offers this escape hatch — drop to LIGHT rendering at runtime.
+    if ((e.key === 'l' || e.key === 'L') && renderer.lossCount > 1 && !renderer.contextLost) {
+      renderer.setMode('light');
+      mapper.mode = 'light';
+    }
   });
 
   // ---- BEAT toggle + BPM control ---------------------------------------------

@@ -113,6 +113,18 @@ export class Hud {
       line('⚠ ' + s.recordError, RED);
     }
 
+    // WebGL context-loss notice (issue #21) — visuals only, audio keeps
+    // running underneath. Blinks while actively lost; once recovery has
+    // repeated more than once in this session, offers a LIGHT-mode escape
+    // hatch via keyboard (main.js binds 'L').
+    if (osd && osd.glLost) {
+      if (blinkOn) line('⚠ GPU CONTEXT LOST — RECOVERING…', RED);
+      else y += lh;
+    }
+    if (osd && osd.glLossRepeated) {
+      line(`⚠ GPU UNSTABLE (${osd.glLossCount}×) — PRESS L FOR LIGHT MODE`, RED);
+    }
+
     // debug panel (?debug URL flag) — FPS/latency/encoder-queue instrumentation.
     if (s.debug) {
       line(`RENDER ${Math.round(fps || 0)}FPS  TRK ${Math.round(s.trackingFps || 0)}FPS`, CYAN);

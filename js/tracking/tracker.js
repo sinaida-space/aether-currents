@@ -6,8 +6,13 @@
 
 const LANDMARK_COUNT = 21;
 
+// FULL mode's tracking rate was raised 40->60Hz (task 5): FULL is only ever
+// selected by syscheck.js's capability probe (WebGL2 render-score + GPU/CPU/
+// memory heuristics) after confirming the machine has headroom, so the extra
+// worker round-trips ride on capacity already validated at boot. LIGHT stays
+// at 20Hz — it's the fallback path for exactly the machines without headroom.
 const MODE_CONFIG = {
-  full: { sendHz: 40, resizeWidth: 720 },
+  full: { sendHz: 60, resizeWidth: 720 },
   light: { sendHz: 20, resizeWidth: 480 },
 };
 
@@ -32,7 +37,14 @@ function mapLabelToSide(label) {
 // ---- one-euro filter ----------------------------------------------------
 
 class OneEuro {
-  constructor(minCutoff = 1.2, beta = 0.007, dCutoff = 1.0) {
+  // Tuned for latency (task 5): minCutoff raised 1.2->1.8 so slow, deliberate
+  // moves get less baseline smoothing (this is the dominant lag contributor
+  // at low speed); beta raised 0.007->0.015 so the cutoff opens up faster
+  // under fast motion (the one-euro adaptive term), tightening large gesture
+  // response without materially increasing jitter at rest — the low-speed
+  // floor (minCutoff) still rejects micro-tremor. dCutoff left at 1.0 (only
+  // affects derivative-estimate smoothing, not a latency-critical term).
+  constructor(minCutoff = 1.8, beta = 0.015, dCutoff = 1.0) {
     this.minCutoff = minCutoff;
     this.beta = beta;
     this.dCutoff = dCutoff;

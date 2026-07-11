@@ -90,6 +90,27 @@
   <button id="btn-samples" class="btn">SAMPLES</button>
   <button id="btn-bg" class="btn">BG: VOID</button>
   <button id="btn-beat" class="btn">▸ BEAT</button>
+  <button id="btn-scale" class="btn">A MIN PENT</button>
+  <button id="btn-declutter" class="btn" title="show/hide controls">[≡]</button>
+</div>
+
+<div id="perf-toast" class="toast-panel" style="display:none">
+  <div id="perf-toast-text">FULL MODE is running under 45fps. Switch to LIGHT mode for smoother tracking?</div>
+  <div class="btn-row">
+    <button id="btn-perf-switch" class="btn">▸ SWITCH TO LIGHT</button>
+    <button id="btn-perf-dismiss" class="btn">DISMISS</button>
+  </div>
+</div>
+
+<div id="declutter-panel" class="dos-panel" style="display:none">
+  <div class="dos-panel-title">UI DECLUTTER</div>
+  <div class="btn-row">
+    <button id="btn-minimal" class="btn">▸ MINIMAL VIEW</button>
+    <button id="btn-declutter-reset" class="btn">▸ SHOW ALL</button>
+  </div>
+  <ul id="declutter-list" class="declutter-list"></ul>
+  <div class="dos-panel-note">hidden buttons stay reachable by their keyboard shortcuts. this panel only affects the visible row.</div>
+  <button id="btn-close-declutter" class="btn">[ ESC ] CLOSE</button>
 </div>
 
 <div id="sample-menu" class="dos-panel" style="display:none">

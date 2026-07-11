@@ -4,12 +4,36 @@
 // never spam the audio thread's message/param queues.
 
 const EPS = 1e-3;
-const TAU = 0.05;
-const TAU_POSITION = 0.08;
-const TAU_PITCH = 0.08; // gooey portamento between quantized pitch bands
+const TAU = 0.04; // was 0.05 — trimmed for latency (task 5); still glitch-safe
+const TAU_POSITION = 0.06; // was 0.08 — trimmed for latency; playhead motion stays audibly smooth
+// Pitch portamento: quantized-band changes should feel like a note attack, not
+// a glide, so they get a much shorter time constant. Octave-shift transitions
+// (same band, different octave) keep the old gooey tau since a bare semitone
+// jump of 12 without any smoothing pops audibly.
+const TAU_PITCH_SNAP = 0.025; // band change — snap-fast (task 5 spec)
+const TAU_PITCH_GLIDE = 0.08; // same-band re-writes (octave shift) — original portamento
 
-// A minor pentatonic + octave, 6 quantized bands (semitone offsets).
-const SCALE = [0, 3, 5, 7, 10, 12];
+// Scale library — 6 quantized bands each (semitone offsets from root).
+// minorPentatonic is the original A minor pentatonic pattern, unchanged.
+// naturalMinor drops the 6th degree (keeps 1,2,b3,4,5,b7+octave) to fit
+// 6 bands while still reading clearly as "minor" against the pentatonics/blues.
+export const SCALE_DEFS = {
+  minorPentatonic: [0, 3, 5, 7, 10, 12],
+  blues: [0, 3, 5, 6, 7, 10],
+  majorPentatonic: [0, 2, 4, 7, 9, 12],
+  naturalMinor: [0, 2, 3, 5, 7, 10],
+};
+export const SCALE_IDS = ['minorPentatonic', 'blues', 'majorPentatonic', 'naturalMinor'];
+export const SCALE_LABELS = {
+  minorPentatonic: 'MIN PENT',
+  blues: 'BLUES',
+  majorPentatonic: 'MAJ PENT',
+  naturalMinor: 'NAT MIN',
+};
+// Chromatic root names, C=0 .. B=11 (standard pitch-class order).
+export const ROOT_KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const DEFAULT_ROOT_INDEX = 9; // 'A' — matches the original hardcoded A minor pentatonic exactly.
+
 const OCTAVE_COOLDOWN_MS = 600;
 const CHORD_ARP_HOLD_MS = 300; // left-hand 3-finger hold to flip chord<->arp
 
@@ -47,6 +71,11 @@ export class Mapper {
     this._frozen = false;
     this._prevBurstCount = 0;
 
+    // debug instrumentation (issue #20) — optional refs wired in by main.js
+    this.recorder = null; // Recorder instance, for encodeQueueSize
+    this.recordState = null; // { error, errorUntil } shared object from main.js
+    this._latencySamples = [];
+
     // octave-shift gesture state (left-hand index-point rising edge)
     this._octaveShift = 0; // -1 | 0 | +1
     this._octaveArmed = true; // re-armed only after leftIndexPoint returns to null
@@ -55,7 +84,19 @@ export class Mapper {
     this._chordArp = false; // false = simultaneous dyad, true = legacy alternating arpeggio
     this._chordArpArmed = true; // re-armed only once left 3-finger pose releases
     this._chordArpHoldSince = null;
-    this._pitchBand = null; // last computed band index, for HUD
+    this._pitchBand = null; // committed/sounding band index, for HUD
+
+    // beat-snap pitch state (task 7): while engine.beatOn, band changes hold
+    // until the next 8th-note boundary, then commit the latest band seen.
+    this._committedBand = null; // band currently written to the audio param
+    this._pendingBand = null; // latest band the hand has moved to since last commit
+    this._last8thIndex = null; // absolute 8th-note grid index, to detect boundary crossings
+
+    // scale + key state — defaults reproduce the original hardcoded A minor
+    // pentatonic exactly. Persisted/set from main.js (localStorage), like
+    // bgMode/osdOn.
+    this._scaleId = 'minorPentatonic';
+    this._rootKeyIndex = DEFAULT_ROOT_INDEX;
 
     // held two-hand values (persist when only one hand present)
     this._heldCutoff = 8000;
@@ -90,12 +131,52 @@ export class Mapper {
     this.sampleName = name;
   }
 
-  _setParam(key, audioParamName, value) {
+  // ---- scale + key -------------------------------------------------------
+
+  setScale(id) {
+    if (SCALE_DEFS[id]) this._scaleId = id;
+  }
+
+  cycleScale() {
+    const i = SCALE_IDS.indexOf(this._scaleId);
+    this.setScale(SCALE_IDS[(i + 1) % SCALE_IDS.length]);
+  }
+
+  getScaleId() {
+    return this._scaleId;
+  }
+
+  setRootKey(index) {
+    this._rootKeyIndex = ((index % 12) + 12) % 12;
+  }
+
+  cycleRootKey() {
+    this.setRootKey(this._rootKeyIndex + 1);
+  }
+
+  getRootKeyIndex() {
+    return this._rootKeyIndex;
+  }
+
+  // Live note names for the active scale+key, one per band (low->high).
+  _noteNames() {
+    const def = SCALE_DEFS[this._scaleId];
+    return def.map((offset) => ROOT_KEYS[(this._rootKeyIndex + offset) % 12]);
+  }
+
+  _setParam(key, audioParamName, value, tauOverride) {
     const last = this._last[key];
     if (last !== null && Math.abs(value - last) < EPS) return;
     this._last[key] = value;
     const p = this.params.get(audioParamName);
-    const tau = key === 'position' ? TAU_POSITION : key === 'pitch' ? TAU_PITCH : TAU;
+    const tau =
+      tauOverride !== undefined
+        ? tauOverride
+        : key === 'position'
+          ? TAU_POSITION
+          : key === 'pitch'
+            ? TAU_PITCH_GLIDE
+            : TAU;
     p.setTargetAtTime(value, this.ctx.currentTime, tau);
   }
 
@@ -152,10 +233,38 @@ export class Mapper {
       }
       const y = Math.max(0, Math.min(1, hands.right.y));
       const band = Math.min(5, Math.floor((1 - y) * 6)); // top(y=0)->band5 (highest)
-      this._pitchBand = band;
-      const semitones = SCALE[band] + 12 * this._octaveShift;
+
+      if (!this.engine.beatOn) {
+        // free-running (task 5 snap-fast behavior): band commits instantly.
+        this._committedBand = band;
+        this._pendingBand = null;
+        this._last8thIndex = null; // re-init cleanly if BEAT re-engages later
+      } else {
+        this._pendingBand = band;
+        if (this._committedBand == null) this._committedBand = band; // first frame under BEAT
+        const bp = this.engine.getBeatPhase(); // { bpm, phase (0..1 within beat), beatIndex }
+        const phase = bp && bp.phase != null ? bp.phase : 0;
+        const beatIndex = bp && bp.beatIndex != null ? bp.beatIndex : 0;
+        // 8 subdivisions/beat -> absolute 8th-note grid index since beat start.
+        const idx8 = beatIndex * 8 + Math.floor(phase * 8 + 1e-9);
+        if (this._last8thIndex == null) {
+          // Just started tracking (BEAT freshly on, or first tick) — don't
+          // force a commit mid-gesture; wait for the next real boundary.
+          this._last8thIndex = idx8;
+        } else if (idx8 !== this._last8thIndex) {
+          this._last8thIndex = idx8;
+          this._committedBand = this._pendingBand; // commit the latest band seen
+        }
+      }
+
+      const bandChanged = this._pitchBand !== null && this._committedBand !== this._pitchBand;
+      this._pitchBand = this._committedBand; // HUD: committed/sounding band
+      const rootOffset = this._rootKeyIndex - DEFAULT_ROOT_INDEX; // transposes vs. the original A-rooted scale
+      const semitones = SCALE_DEFS[this._scaleId][this._committedBand] + rootOffset + 12 * this._octaveShift;
       const pitch = Math.max(0.25, Math.min(4, Math.pow(2, semitones / 12)));
-      this._setParam('pitch', 'pitch', pitch);
+      // Snap-fast on a band change (new note = attack), glide within the same
+      // band (octave-shift re-write only) to avoid an audible pop (task 5).
+      this._setParam('pitch', 'pitch', pitch, bandChanged ? TAU_PITCH_SNAP : TAU_PITCH_GLIDE);
 
       // --- chord (3 extended right-hand fingers -> perfect-5th alternation) ---
       this._setParam('chord', 'chord', gestures.chordOn ? 1 : 0);
@@ -211,6 +320,20 @@ export class Mapper {
 
     this._handsPresent = anyHand;
 
+    // --- motion->sound latency estimate (proxy: gesture-result timestamp to
+    // this setTargetAtTime-driving tick; not a measurement of the real audio
+    // graph, no AudioParam read-back exists) ---
+    const latencyMs = this.tracker.lastResultTs != null
+      ? Math.max(0, nowMs - this.tracker.lastResultTs)
+      : null;
+    if (latencyMs != null) {
+      this._latencySamples.push(latencyMs);
+      if (this._latencySamples.length > 60) this._latencySamples.shift();
+    }
+    const latencyMaxMs = this._latencySamples.length
+      ? Math.max(...this._latencySamples)
+      : null;
+
     // --- build renderer state ---
     const beatPhase = this.engine.getBeatPhase();
     const rendererState = {
@@ -221,6 +344,14 @@ export class Mapper {
       },
       octaveShift: this._octaveShift,
       pitchBand: this._pitchBand,
+      pendingPitchBand:
+        this.engine.beatOn && this._pendingBand != null && this._pendingBand !== this._committedBand
+          ? this._pendingBand
+          : null,
+      scaleId: this._scaleId,
+      scaleLabel: SCALE_LABELS[this._scaleId],
+      rootKeyName: ROOT_KEYS[this._rootKeyIndex],
+      noteNames: this._noteNames(),
       chordOn: gestures.chordOn,
       chordArp: this._chordArp,
       beatOn: this.engine.beatOn,
@@ -239,6 +370,11 @@ export class Mapper {
       recording: this.recording,
       trackingFps: this.tracker.trackingFps,
       stale: state.stale,
+      latencyMs,
+      latencyMaxMs,
+      encodeQueueSize: this.recorder ? this.recorder.encodeQueueSize : 0,
+      recordError: this.recordState ? this.recordState.error : null,
+      recordErrorUntil: this.recordState ? this.recordState.errorUntil : 0,
     };
 
     this.renderer.frame(dt, rendererState);

@@ -18,6 +18,18 @@ const PCM_CHUNK = 8192;
 const MP4_KEYFRAME_INTERVAL_US = 2_000_000; // 2s
 const MP4_BACKPRESSURE_QUEUE_SIZE = 4;
 
+// FULL mode records 1080p60 by default, but that's real main-thread encode
+// load stacked on top of rendering. If the renderer's live FPS EMA (already
+// running for a few seconds before the user hits record) shows the machine
+// isn't comfortably holding 60fps *before* we add encode work, drop the
+// recording target to 1080p30 instead — same resolution, half the per-second
+// encode+draw cost. Threshold sits a bit under 60 to allow for normal jitter.
+const FULL_FPS_DOWNGRADE_THRESHOLD = 50;
+// If stop()'s own cleanup work throws or hangs, this hard cap on waiting for
+// a graceful stop keeps the button state machine (js/main.js) from ever
+// needing to wait indefinitely — see _handleEncoderFailure().
+const GRACEFUL_STOP_TIMEOUT_MS = 4000;
+
 // ---- inline PCM-tap worklet (Blob URL module) ----------------------------
 const PCM_WORKLET_SRC = `
 class PCMTap extends AudioWorkletProcessor {
@@ -182,7 +194,7 @@ function pickMimeType() {
 
 // ---- WebCodecs MP4 capability probe ---------------------------------------
 
-async function probeMp4Support(width, height, sampleRate) {
+async function probeMp4Support(width, height, sampleRate, framerate) {
   if (typeof window === 'undefined') return false;
   if (!window.VideoEncoder || !window.AudioEncoder) return false;
   try {
@@ -191,7 +203,7 @@ async function probeMp4Support(width, height, sampleRate) {
       width,
       height,
       bitrate: 8_000_000,
-      framerate: 60,
+      framerate: framerate || 60,
     };
     const audioConfig = {
       codec: 'mp4a.40.2',
@@ -210,14 +222,24 @@ async function probeMp4Support(width, height, sampleRate) {
 }
 
 export class Recorder {
-  constructor({ glCanvas, hudCanvas, audioNode, audioContext, modeLabel }) {
+  constructor({ glCanvas, hudCanvas, audioNode, audioContext, modeLabel, onError, getFps }) {
     this.glCanvas = glCanvas;
     this.hudCanvas = hudCanvas;
     this.audioNode = audioNode; // engine.output
     this.ctx = audioContext;
     this.modeLabel = modeLabel;
+    this._onError = typeof onError === 'function' ? onError : null;
+    // Optional live-FPS sampler (e.g. () => renderer.fps), used at start()
+    // to decide 1080p60 vs 1080p30 in FULL mode. Absent/zero reading = skip
+    // the downgrade (fail open to the higher-quality default).
+    this._getFps = typeof getFps === 'function' ? getFps : null;
+    this._recordFps = 60;
 
     this.recording = false;
+    // Set true the moment an encoder/MediaRecorder reports an error so stop()
+    // knows to salvage rather than assume a clean flush is possible, and so
+    // repeat error events don't each try to trigger their own stop().
+    this._encoderFailed = false;
 
     // Optional hook, settable by the caller: fires with { videoBlob,
     // videoKind, wavBlob, filename, webmBlob } whenever a recording
@@ -252,6 +274,12 @@ export class Recorder {
     this._muxerTarget = null;
     this._lastKeyFrameUs = -Infinity;
     this._audioTimestampUs = 0;
+  }
+
+  // Live WebCodecs encode backlog, for debug instrumentation (issue #20).
+  // 0 when not using the MP4/WebCodecs path (e.g. MediaRecorder fallback).
+  get encodeQueueSize() {
+    return this._videoEncoder ? this._videoEncoder.encodeQueueSize : 0;
   }
 
   async _ensurePcmModule() {
@@ -303,13 +331,21 @@ export class Recorder {
     const cw = light ? 1280 : 1920;
     const ch = light ? 720 : 1080;
 
+    this._recordFps = 60;
+    if (!light) {
+      const fps = this._getFps ? this._getFps() : null;
+      if (typeof fps === 'number' && fps > 0 && fps < FULL_FPS_DOWNGRADE_THRESHOLD) {
+        this._recordFps = 30;
+      }
+    }
+
     const canvas = document.createElement('canvas');
     canvas.width = cw;
     canvas.height = ch;
     this._compositeCanvas = canvas;
     this._compositeCtx = canvas.getContext('2d');
 
-    this._useMp4 = await probeMp4Support(cw, ch, this.ctx.sampleRate);
+    this._useMp4 = await probeMp4Support(cw, ch, this.ctx.sampleRate, this._recordFps);
 
     if (this._useMp4) {
       this._startMp4Encoders(cw, ch);
@@ -350,7 +386,7 @@ export class Recorder {
   // --- MediaRecorder webm fallback path --------------------------------
   _startWebmRecorder(canvas) {
     // --- video stream: composite canvas + branded overlay, own rAF loop ---
-    const videoStream = canvas.captureStream(60);
+    const videoStream = canvas.captureStream(this._recordFps);
 
     // --- audio: MediaStreamAudioDestinationNode fed from engine.output, no disconnect of speakers ---
     const dest = this.ctx.createMediaStreamDestination();
@@ -370,6 +406,11 @@ export class Recorder {
     this._videoChunks = [];
     const mr = new MediaRecorder(combined, options);
     mr.ondataavailable = (e) => { if (e.data && e.data.size) this._videoChunks.push(e.data); };
+    mr.onerror = (e) => {
+      console.error('[recorder] MediaRecorder error', e);
+      this._onError?.('RECORDER ERROR');
+      this._handleEncoderFailure();
+    };
     this._mediaRecorder = mr;
     mr.start(250);
   }
@@ -396,20 +437,28 @@ export class Recorder {
 
     const videoEncoder = new VideoEncoder({
       output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-      error: (e) => { console.error('[recorder] VideoEncoder error', e); },
+      error: (e) => {
+        console.error('[recorder] VideoEncoder error', e);
+        this._onError?.('VIDEO ENCODER ERROR — stopping');
+        this._handleEncoderFailure();
+      },
     });
     videoEncoder.configure({
       codec: 'avc1.640028',
       width: cw,
       height: ch,
       bitrate: 8_000_000,
-      framerate: 60,
+      framerate: this._recordFps,
     });
     this._videoEncoder = videoEncoder;
 
     const audioEncoder = new AudioEncoder({
       output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
-      error: (e) => { console.error('[recorder] AudioEncoder error', e); },
+      error: (e) => {
+        console.error('[recorder] AudioEncoder error', e);
+        this._onError?.('AUDIO ENCODER ERROR — stopping');
+        this._handleEncoderFailure();
+      },
     });
     audioEncoder.configure({
       codec: 'mp4a.40.2',
@@ -472,8 +521,10 @@ export class Recorder {
     // at a steady ~60fps regardless of tab visibility.
     // Drift-corrected: each tick is scheduled against an absolute timebase,
     // so draw+encode execution time doesn't additively stack onto the period
-    // (tail-scheduling would sag below 60fps under FULL MODE + encode load).
-    const FRAME_INTERVAL_MS = 1000 / 60;
+    // (tail-scheduling would sag below target fps under FULL MODE + encode
+    // load). Runs at this._recordFps (60, or 30 on marginal FULL-mode
+    // machines — see FULL_FPS_DOWNGRADE_THRESHOLD).
+    const FRAME_INTERVAL_MS = 1000 / this._recordFps;
     let nextTick = performance.now() + FRAME_INTERVAL_MS;
     const draw = () => {
       if (!this.recording) return;
@@ -522,47 +573,96 @@ export class Recorder {
     ctx.drawImage(srcCanvas, dx, dy, drawW, drawH);
   }
 
+  // Fired from an encoder/MediaRecorder error callback mid-recording. The
+  // encoder is already dead (WebCodecs auto-closes on error; MediaRecorder
+  // goes 'inactive'), so waiting for the user to hit the button would just
+  // wedge on "● STOP" when flush() throws. Instead, stop proactively and
+  // salvage whatever was captured — stop() itself is written to tolerate an
+  // already-errored encoder, so this is the same code path as a manual stop.
+  _handleEncoderFailure() {
+    if (this._encoderFailed || !this.recording) return;
+    this._encoderFailed = true;
+    const stopPromise = this.stop();
+    const timeout = new Promise((resolve) => setTimeout(resolve, GRACEFUL_STOP_TIMEOUT_MS, 'timeout'));
+    Promise.race([stopPromise, timeout]).then((v) => {
+      if (v === 'timeout') {
+        console.error('[recorder] graceful stop after encoder failure did not settle — forcing teardown');
+      }
+    });
+    stopPromise.catch((err) => {
+      // stop() is defensive (see below) and should not normally reject, but
+      // guarantee there is never an unhandled rejection or a wedged state
+      // even if something unexpected throws.
+      console.error('[recorder] stop() after encoder failure threw — forcing teardown', err);
+      this._onError?.('RECORDING FAILED — no file');
+      this._teardownOnError();
+      if (typeof this.onStop === 'function') this.onStop(null);
+    });
+  }
+
   async stop() {
     if (!this.recording) return null;
     this.recording = false;
+    this._encoderFailed = false; // consumed for this stop cycle
 
     if (this._stopTimer) { clearTimeout(this._stopTimer); this._stopTimer = null; }
     if (this._compositeRaf) { clearTimeout(this._compositeRaf); this._compositeRaf = null; }
 
-    // --- finalize video ---
-    let videoBlob, videoKind, ext;
+    // --- finalize video — never let a dead/errored encoder throw here.
+    // Each step is independently guarded so a failure in one (e.g. video
+    // flush after a VideoEncoder error) still lets the rest of stop() run
+    // and salvage the audio (WAV always available — the PCM tap is
+    // independent of the encoders) and, where possible, a partial video.
+    let videoBlob = null, videoKind = null, ext = null;
     if (this._useMp4) {
-      await this._videoEncoder.flush();
-      await this._audioEncoder.flush();
-      this._videoEncoder.close();
-      this._audioEncoder.close();
-      this._muxer.finalize();
-      videoBlob = new Blob([this._muxerTarget.buffer], { type: 'video/mp4' });
-      videoKind = 'mp4';
-      ext = 'mp4';
+      const v = this._videoEncoder;
+      const a = this._audioEncoder;
+      try { if (v && v.state === 'configured') await v.flush(); } catch (e) { console.error('[recorder] video flush failed', e); }
+      try { if (a && a.state === 'configured') await a.flush(); } catch (e) { console.error('[recorder] audio flush failed', e); }
+      try { if (v && v.state !== 'closed') v.close(); } catch (e) { /* already closed */ }
+      try { if (a && a.state !== 'closed') a.close(); } catch (e) { /* already closed */ }
       this._videoEncoder = null;
       this._audioEncoder = null;
+      try {
+        this._muxer.finalize();
+        const buf = this._muxerTarget.buffer;
+        if (buf && buf.byteLength > 0) {
+          videoBlob = new Blob([buf], { type: 'video/mp4' });
+          videoKind = 'mp4';
+          ext = 'mp4';
+        }
+      } catch (e) {
+        console.error('[recorder] mp4 finalize failed — no video salvageable, WAV export still available', e);
+        this._onError?.('VIDEO LOST — audio saved');
+      }
       this._muxer = null;
       this._muxerTarget = null;
     } else {
       const mr = this._mediaRecorder;
-      const webmDone = new Promise((resolve) => {
-        mr.onstop = resolve;
-      });
-      mr.stop();
-      await webmDone;
-      videoBlob = new Blob(this._videoChunks, { type: this._mimeType || 'video/webm' });
-      videoKind = 'webm';
-      ext = 'webm';
+      try {
+        if (mr && mr.state !== 'inactive') {
+          const webmDone = new Promise((resolve) => { mr.onstop = resolve; });
+          mr.stop();
+          await webmDone;
+        }
+        if (this._videoChunks.length) {
+          videoBlob = new Blob(this._videoChunks, { type: this._mimeType || 'video/webm' });
+          videoKind = 'webm';
+          ext = 'webm';
+        }
+      } catch (e) {
+        console.error('[recorder] webm finalize failed — no video salvageable, WAV export still available', e);
+        this._onError?.('VIDEO LOST — audio saved');
+      }
       this._mediaRecorder = null;
       this._videoChunks = [];
     }
 
-    // --- finalize audio tap ---
-    this.audioNode.disconnect(this._pcmNode);
-    if (this._destNode) this.audioNode.disconnect(this._destNode);
-    this._pcmNode.port.onmessage = null;
-    this._pcmNode.disconnect();
+    // --- finalize audio tap (always attempted — independent of encoder health) ---
+    try { if (this._pcmNode) this.audioNode.disconnect(this._pcmNode); } catch (e) { /* not connected */ }
+    try { if (this._destNode) this.audioNode.disconnect(this._destNode); } catch (e) { /* not connected */ }
+    if (this._pcmNode) this._pcmNode.port.onmessage = null;
+    try { if (this._pcmNode) this._pcmNode.disconnect(); } catch (e) { /* already disconnected */ }
     this._pcmNode = null;
     this._destNode = null;
 
@@ -589,14 +689,20 @@ export class Recorder {
     const wavBlob = encodeWav(chL, chR, this.ctx.sampleRate, tags);
 
     const slug = timestampSlug(now);
+    // ext is null when video capture failed entirely (nothing salvageable) —
+    // filename.video/webm are then omitted rather than naming a file that
+    // doesn't exist; wav is always present since the PCM tap never depends
+    // on encoder health.
     const filename = {
-      video: `aether-currents_${slug}.${ext}`,
       wav: `aether-currents_${slug}.wav`,
+    };
+    if (ext) {
+      filename.video = `aether-currents_${slug}.${ext}`;
       // Legacy key, kept for js/main.js back-compat — extension-correct for
       // whichever kind was actually produced (mp4 on WebCodecs, webm on the
       // MediaRecorder fallback).
-      webm: `aether-currents_${slug}.${ext}`,
-    };
+      filename.webm = `aether-currents_${slug}.${ext}`;
+    }
 
     const result = {
       videoBlob,

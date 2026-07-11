@@ -1,16 +1,22 @@
-// recorder.js — video+audio capture, branded compositing, WAV export.
+// recorder.js — video+audio capture, branded compositing, MP4/WAV export.
 // Owns two parallel recordings that both start/stop together:
-//   1. a MediaRecorder on an offscreen branded-compositing canvas + audio
-//      (produces the downloadable .webm)
+//   1. video — WebCodecs path (VideoEncoder + AudioEncoder muxed to MP4 via
+//      vendored mp4-muxer) when supported, else a MediaRecorder fallback on
+//      an offscreen branded-compositing canvas + audio (produces .webm)
 //   2. a raw PCM tap via an inline AudioWorklet feeding a WAV encoder with
-//      RIFF LIST-INFO tags (produces the downloadable .wav)
+//      RIFF LIST-INFO tags (produces the downloadable .wav) — also reused
+//      as the AAC source for the MP4 path.
 //
 // Boundary: does not touch js/audio, js/tracking, js/visuals internals —
 // only reads glCanvas/hudCanvas via drawImage and taps engine.output via
 // the public connectRecorderTap()/output surface.
 
+import { Muxer, ArrayBufferTarget } from './vendor/mp4-muxer.min.mjs';
+
 const MAX_DURATION_MS = 5 * 60 * 1000; // hard 5min cap
 const PCM_CHUNK = 8192;
+const MP4_KEYFRAME_INTERVAL_US = 2_000_000; // 2s
+const MP4_BACKPRESSURE_QUEUE_SIZE = 4;
 
 // ---- inline PCM-tap worklet (Blob URL module) ----------------------------
 const PCM_WORKLET_SRC = `
@@ -186,6 +192,35 @@ function pickMimeType() {
   return '';
 }
 
+// ---- WebCodecs MP4 capability probe ---------------------------------------
+
+async function probeMp4Support(width, height, sampleRate) {
+  if (typeof window === 'undefined') return false;
+  if (!window.VideoEncoder || !window.AudioEncoder) return false;
+  try {
+    const videoConfig = {
+      codec: 'avc1.640028',
+      width,
+      height,
+      bitrate: 8_000_000,
+      framerate: 60,
+    };
+    const audioConfig = {
+      codec: 'mp4a.40.2',
+      sampleRate,
+      numberOfChannels: 2,
+      bitrate: 192_000,
+    };
+    const [v, a] = await Promise.all([
+      VideoEncoder.isConfigSupported(videoConfig),
+      AudioEncoder.isConfigSupported(audioConfig),
+    ]);
+    return !!(v && v.supported && a && a.supported);
+  } catch (e) {
+    return false;
+  }
+}
+
 export class Recorder {
   constructor({ glCanvas, hudCanvas, audioNode, audioContext, modeLabel }) {
     this.glCanvas = glCanvas;
@@ -196,9 +231,12 @@ export class Recorder {
 
     this.recording = false;
 
-    // Optional hook, settable by the caller: fires with { webmBlob, wavBlob,
-    // filename } whenever a recording finishes, whether via manual stop() or
-    // the internal 5-minute hard-stop timer (which calls stop() on its own).
+    // Optional hook, settable by the caller: fires with { videoBlob,
+    // videoKind, wavBlob, filename, webmBlob } whenever a recording
+    // finishes, whether via manual stop() or the internal 5-minute
+    // hard-stop timer (which calls stop() on its own). webmBlob is a
+    // back-compat alias of videoBlob; filename.webm is extension-correct
+    // for whichever kind (mp4/webm) was actually produced.
     this.onStop = null;
 
     this._compositeCanvas = null;
@@ -217,6 +255,15 @@ export class Recorder {
     this._destNode = null; // MediaStreamAudioDestinationNode
     this._stopTimer = null;
     this._startedAt = 0;
+
+    // WebCodecs MP4 path state (only used when probeMp4Support() passes).
+    this._useMp4 = false;
+    this._videoEncoder = null;
+    this._audioEncoder = null;
+    this._muxer = null;
+    this._muxerTarget = null;
+    this._lastKeyFrameUs = -Infinity;
+    this._audioTimestampUs = 0;
   }
 
   async _ensurePcmModule() {
@@ -246,10 +293,17 @@ export class Recorder {
   _teardownOnError() {
     try { if (this._mediaRecorder && this._mediaRecorder.state !== 'inactive') this._mediaRecorder.stop(); } catch (e) { /* already dead */ }
     this._mediaRecorder = null;
+    try { if (this._videoEncoder && this._videoEncoder.state !== 'closed') this._videoEncoder.close(); } catch (e) { /* already dead */ }
+    this._videoEncoder = null;
+    try { if (this._audioEncoder && this._audioEncoder.state !== 'closed') this._audioEncoder.close(); } catch (e) { /* already dead */ }
+    this._audioEncoder = null;
+    this._muxer = null;
+    this._muxerTarget = null;
     try { if (this._destNode) this.audioNode.disconnect(this._destNode); } catch (e) { /* not connected */ }
     this._destNode = null;
     try { if (this._pcmNode) { this.audioNode.disconnect(this._pcmNode); this._pcmNode.port.onmessage = null; } } catch (e) { /* not connected */ }
     this._pcmNode = null;
+    if (this._compositeRaf) { clearTimeout(this._compositeRaf); this._compositeRaf = null; }
     if (this._stopTimer) { clearTimeout(this._stopTimer); this._stopTimer = null; }
     this.recording = false;
   }
@@ -267,6 +321,46 @@ export class Recorder {
     this._compositeCanvas = canvas;
     this._compositeCtx = canvas.getContext('2d');
 
+    this._useMp4 = await probeMp4Support(cw, ch, this.ctx.sampleRate);
+
+    if (this._useMp4) {
+      this._startMp4Encoders(cw, ch);
+    } else {
+      this._startWebmRecorder(canvas);
+    }
+
+    // --- parallel PCM tap for WAV (also feeds the AAC encoder on the MP4 path) ---
+    await this._ensurePcmModule();
+    const pcmNode = new AudioWorkletNode(this.ctx, 'aether-pcm-tap', {
+      numberOfInputs: 1,
+      numberOfOutputs: 0,
+      channelCount: 2,
+      channelCountMode: 'explicit',
+    });
+    this._pcmL = [];
+    this._pcmR = [];
+    this._pcmFrameCount = 0;
+    this._audioTimestampUs = 0;
+    pcmNode.port.onmessage = (e) => {
+      this._pcmL.push(e.data.l);
+      this._pcmR.push(e.data.r);
+      this._pcmFrameCount += e.data.l.length;
+      if (this._useMp4 && this._audioEncoder && this._audioEncoder.state === 'configured') {
+        this._encodeAudioChunk(e.data.l, e.data.r);
+      }
+    };
+    this.audioNode.connect(pcmNode);
+    this._pcmNode = pcmNode;
+
+    this.recording = true;
+    this._startedAt = performance.now();
+    this._runCompositeLoop();
+
+    this._stopTimer = setTimeout(() => { this.stop(); }, MAX_DURATION_MS);
+  }
+
+  // --- MediaRecorder webm fallback path --------------------------------
+  _startWebmRecorder(canvas) {
     // --- video stream: composite canvas + branded overlay, own rAF loop ---
     const videoStream = canvas.captureStream(60);
 
@@ -290,34 +384,103 @@ export class Recorder {
     mr.ondataavailable = (e) => { if (e.data && e.data.size) this._videoChunks.push(e.data); };
     this._mediaRecorder = mr;
     mr.start(250);
+  }
 
-    // --- parallel PCM tap for WAV ---
-    await this._ensurePcmModule();
-    const pcmNode = new AudioWorkletNode(this.ctx, 'aether-pcm-tap', {
-      numberOfInputs: 1,
-      numberOfOutputs: 0,
-      channelCount: 2,
-      channelCountMode: 'explicit',
+  // --- WebCodecs MP4 path ------------------------------------------------
+  _startMp4Encoders(cw, ch) {
+    const target = new ArrayBufferTarget();
+    this._muxerTarget = target;
+    const muxer = new Muxer({
+      target,
+      video: { codec: 'avc', width: cw, height: ch },
+      audio: { codec: 'aac', numberOfChannels: 2, sampleRate: this.ctx.sampleRate },
+      fastStart: 'in-memory',
+      // Video's first VideoFrame timestamp and audio's first PCM-tap chunk
+      // timestamp are each independently zeroed against their own clocks
+      // (performance.now() vs. sample count) and won't land on the exact
+      // same instant — offset each track to its own first sample instead
+      // of requiring a hard zero.
+      firstTimestampBehavior: 'offset',
     });
-    this._pcmL = [];
-    this._pcmR = [];
-    this._pcmFrameCount = 0;
-    pcmNode.port.onmessage = (e) => {
-      this._pcmL.push(e.data.l);
-      this._pcmR.push(e.data.r);
-      this._pcmFrameCount += e.data.l.length;
-    };
-    this.audioNode.connect(pcmNode);
-    this._pcmNode = pcmNode;
+    this._muxer = muxer;
 
-    this.recording = true;
-    this._startedAt = performance.now();
-    this._runCompositeLoop();
+    const videoEncoder = new VideoEncoder({
+      output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+      error: (e) => { console.error('[recorder] VideoEncoder error', e); },
+    });
+    videoEncoder.configure({
+      codec: 'avc1.640028',
+      width: cw,
+      height: ch,
+      bitrate: 8_000_000,
+      framerate: 60,
+    });
+    this._videoEncoder = videoEncoder;
 
-    this._stopTimer = setTimeout(() => { this.stop(); }, MAX_DURATION_MS);
+    const audioEncoder = new AudioEncoder({
+      output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+      error: (e) => { console.error('[recorder] AudioEncoder error', e); },
+    });
+    audioEncoder.configure({
+      codec: 'mp4a.40.2',
+      sampleRate: this.ctx.sampleRate,
+      numberOfChannels: 2,
+      bitrate: 192_000,
+    });
+    this._audioEncoder = audioEncoder;
+
+    this._lastKeyFrameUs = -Infinity;
+  }
+
+  _encodeVideoFrame() {
+    const encoder = this._videoEncoder;
+    if (!encoder || encoder.state !== 'configured') return;
+    // Backpressure: skip encoding this frame if the encoder is falling behind.
+    if (encoder.encodeQueueSize > MP4_BACKPRESSURE_QUEUE_SIZE) return;
+
+    const timestampUs = Math.round((performance.now() - this._startedAt) * 1000);
+    const frame = new VideoFrame(this._compositeCanvas, { timestamp: timestampUs });
+    let keyFrame = false;
+    if (timestampUs - this._lastKeyFrameUs >= MP4_KEYFRAME_INTERVAL_US) {
+      keyFrame = true;
+      this._lastKeyFrameUs = timestampUs;
+    }
+    try {
+      encoder.encode(frame, { keyFrame });
+    } finally {
+      frame.close();
+    }
+  }
+
+  _encodeAudioChunk(l, r) {
+    const n = l.length;
+    const planar = new Float32Array(n * 2);
+    planar.set(l, 0);
+    planar.set(r, n);
+    const timestamp = this._audioTimestampUs;
+    const data = new AudioData({
+      format: 'f32-planar',
+      sampleRate: this.ctx.sampleRate,
+      numberOfFrames: n,
+      numberOfChannels: 2,
+      timestamp,
+      data: planar,
+    });
+    try {
+      this._audioEncoder.encode(data);
+    } finally {
+      data.close();
+    }
+    this._audioTimestampUs += (n / this.ctx.sampleRate) * 1e6;
   }
 
   _runCompositeLoop() {
+    // A fixed-interval timer, not requestAnimationFrame: rAF throttles to
+    // near-zero in background/inactive tabs (and in headless test panes),
+    // which would silently stall both the webm capture and the MP4 encode
+    // queue if the user tabs away mid-recording. setTimeout keeps drawing
+    // at a steady ~60fps regardless of tab visibility.
+    const FRAME_INTERVAL_MS = 1000 / 60;
     const draw = () => {
       if (!this.recording) return;
       const ctx = this._compositeCtx;
@@ -334,9 +497,11 @@ export class Recorder {
 
       drawBrandFrame(ctx, cw, ch, this.modeLabel, isoDate(new Date()));
 
-      this._compositeRaf = requestAnimationFrame(draw);
+      if (this._useMp4) this._encodeVideoFrame();
+
+      this._compositeRaf = setTimeout(draw, FRAME_INTERVAL_MS);
     };
-    this._compositeRaf = requestAnimationFrame(draw);
+    this._compositeRaf = setTimeout(draw, FRAME_INTERVAL_MS);
   }
 
   _drawCover(ctx, srcCanvas, dw, dh) {
@@ -365,21 +530,40 @@ export class Recorder {
     this.recording = false;
 
     if (this._stopTimer) { clearTimeout(this._stopTimer); this._stopTimer = null; }
-    if (this._compositeRaf) { cancelAnimationFrame(this._compositeRaf); this._compositeRaf = null; }
+    if (this._compositeRaf) { clearTimeout(this._compositeRaf); this._compositeRaf = null; }
 
     // --- finalize video ---
-    const mr = this._mediaRecorder;
-    const webmDone = new Promise((resolve) => {
-      mr.onstop = resolve;
-    });
-    mr.stop();
-    await webmDone;
-
-    const webmBlob = new Blob(this._videoChunks, { type: this._mimeType || 'video/webm' });
+    let videoBlob, videoKind, ext;
+    if (this._useMp4) {
+      await this._videoEncoder.flush();
+      await this._audioEncoder.flush();
+      this._videoEncoder.close();
+      this._audioEncoder.close();
+      this._muxer.finalize();
+      videoBlob = new Blob([this._muxerTarget.buffer], { type: 'video/mp4' });
+      videoKind = 'mp4';
+      ext = 'mp4';
+      this._videoEncoder = null;
+      this._audioEncoder = null;
+      this._muxer = null;
+      this._muxerTarget = null;
+    } else {
+      const mr = this._mediaRecorder;
+      const webmDone = new Promise((resolve) => {
+        mr.onstop = resolve;
+      });
+      mr.stop();
+      await webmDone;
+      videoBlob = new Blob(this._videoChunks, { type: this._mimeType || 'video/webm' });
+      videoKind = 'webm';
+      ext = 'webm';
+      this._mediaRecorder = null;
+      this._videoChunks = [];
+    }
 
     // --- finalize audio tap ---
     this.audioNode.disconnect(this._pcmNode);
-    this.audioNode.disconnect(this._destNode);
+    if (this._destNode) this.audioNode.disconnect(this._destNode);
     this._pcmNode.port.onmessage = null;
     this._pcmNode.disconnect();
     this._pcmNode = null;
@@ -409,11 +593,22 @@ export class Recorder {
 
     const slug = timestampSlug(now);
     const filename = {
-      webm: `aether-currents_${slug}.webm`,
+      video: `aether-currents_${slug}.${ext}`,
       wav: `aether-currents_${slug}.wav`,
+      // Legacy key, kept for js/main.js back-compat — extension-correct for
+      // whichever kind was actually produced (mp4 on WebCodecs, webm on the
+      // MediaRecorder fallback).
+      webm: `aether-currents_${slug}.${ext}`,
     };
 
-    const result = { webmBlob, wavBlob, filename };
+    const result = {
+      videoBlob,
+      videoKind,
+      wavBlob,
+      filename,
+      // Legacy alias, kept for js/main.js back-compat.
+      webmBlob: videoBlob,
+    };
     if (typeof this.onStop === 'function') this.onStop(result);
     return result;
   }

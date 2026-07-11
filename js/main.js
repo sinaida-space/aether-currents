@@ -33,6 +33,8 @@ const camVideo = document.getElementById('cam');
 let lastProbe = null;
 let pendingMode = null;
 
+const DEBUG = new URLSearchParams(location.search).has('debug');
+
 function hasConsent() {
   return localStorage.getItem(CONSENT_KEY) === '1';
 }
@@ -415,7 +417,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
 
     // Renderer construction is synchronous WebGL setup — runs immediately,
     // alongside the async engine/library/tracker work above.
-    renderer = new Renderer(glCanvas, hudCanvas, { mode, video: camVideo });
+    renderer = new Renderer(glCanvas, hudCanvas, { mode, video: camVideo, debug: DEBUG });
 
     [engine, library, tracker] = await Promise.all([enginePromise, libraryPromise, trackerPromise]);
   } catch (err) {
@@ -731,13 +733,25 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
 
   // ---- recorder -----------------------------------------------------------
 
+  // Shared mutable object: Recorder writes into it (onError), Mapper reads
+  // it each tick and threads it into rendererState for the HUD to render.
+  // Errors must surface regardless of ?debug — never silent.
+  const recordState = { error: null, errorUntil: 0 };
+
   const recorder = new Recorder({
     glCanvas,
     hudCanvas,
     audioNode: engine.output,
     audioContext,
     modeLabel: mode === 'full' ? 'FULL MODE' : 'LIGHT MODE',
+    onError: (msg) => {
+      recordState.error = msg;
+      recordState.errorUntil = performance.now() + 6000;
+    },
   });
+
+  mapper.recorder = recorder;
+  mapper.recordState = recordState;
 
   let lastExport = null;
 

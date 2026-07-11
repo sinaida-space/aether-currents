@@ -210,12 +210,13 @@ async function probeMp4Support(width, height, sampleRate) {
 }
 
 export class Recorder {
-  constructor({ glCanvas, hudCanvas, audioNode, audioContext, modeLabel }) {
+  constructor({ glCanvas, hudCanvas, audioNode, audioContext, modeLabel, onError }) {
     this.glCanvas = glCanvas;
     this.hudCanvas = hudCanvas;
     this.audioNode = audioNode; // engine.output
     this.ctx = audioContext;
     this.modeLabel = modeLabel;
+    this._onError = typeof onError === 'function' ? onError : null;
 
     this.recording = false;
 
@@ -252,6 +253,12 @@ export class Recorder {
     this._muxerTarget = null;
     this._lastKeyFrameUs = -Infinity;
     this._audioTimestampUs = 0;
+  }
+
+  // Live WebCodecs encode backlog, for debug instrumentation (issue #20).
+  // 0 when not using the MP4/WebCodecs path (e.g. MediaRecorder fallback).
+  get encodeQueueSize() {
+    return this._videoEncoder ? this._videoEncoder.encodeQueueSize : 0;
   }
 
   async _ensurePcmModule() {
@@ -396,7 +403,10 @@ export class Recorder {
 
     const videoEncoder = new VideoEncoder({
       output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-      error: (e) => { console.error('[recorder] VideoEncoder error', e); },
+      error: (e) => {
+        console.error('[recorder] VideoEncoder error', e);
+        this._onError?.('VIDEO ENCODER ERROR');
+      },
     });
     videoEncoder.configure({
       codec: 'avc1.640028',
@@ -409,7 +419,10 @@ export class Recorder {
 
     const audioEncoder = new AudioEncoder({
       output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
-      error: (e) => { console.error('[recorder] AudioEncoder error', e); },
+      error: (e) => {
+        console.error('[recorder] AudioEncoder error', e);
+        this._onError?.('AUDIO ENCODER ERROR');
+      },
     });
     audioEncoder.configure({
       codec: 'mp4a.40.2',

@@ -754,6 +754,10 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
       recordState.error = msg;
       recordState.errorUntil = performance.now() + 6000;
     },
+    // Live FPS EMA (js/visuals/renderer.js), sampled at record-start to
+    // decide 1080p60 vs 1080p30 in FULL mode — cheapest available perf
+    // signal since the renderer is already running under real load.
+    getFps: () => (renderer ? renderer.fps : null),
   });
 
   mapper.recorder = recorder;
@@ -761,27 +765,75 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
 
   let lastExport = null;
 
-  // Centralized: fires whether stop() was triggered by the button or by the
-  // recorder's own 5-minute hard-stop timer, so the UI stays in sync either way.
+  // Centralized: fires whether stop() was triggered by the button, the
+  // recorder's own 5-minute hard-stop timer, or a mid-recording encoder
+  // failure (js/recorder.js _handleEncoderFailure), so the UI stays in sync
+  // and the button state machine can never wedge on "● STOP". result is
+  // null only in the worst case (stop() itself threw); still resets the UI.
   recorder.onStop = (result) => {
     btnRecord.textContent = '● RECORD';
+    btnRecord.disabled = false;
     mapper.recording = false;
-    lastExport = result;
-    recordExport.style.display = 'block';
+    if (result) {
+      lastExport = result;
+      // videoBlob can be null if only audio was salvageable — hide the
+      // video-export affordance rather than offering a download that fails.
+      btnSaveVideo.style.display = result.videoBlob ? '' : 'none';
+      recordExport.style.display = 'block';
+    }
   };
 
+  // btnRecord.disabled doubles as the "an async start/stop is in flight"
+  // debounce so a rapid double-click can't race two start()/stop() calls
+  // against each other and leave state inconsistent.
   btnRecord.addEventListener('click', async () => {
+    if (btnRecord.disabled) return;
     if (!recorder.recording) {
-      await recorder.start();
-      mapper.recording = true;
-      btnRecord.textContent = '● STOP';
+      btnRecord.disabled = true;
+      try {
+        await recorder.start();
+        mapper.recording = true;
+        btnRecord.textContent = '● STOP';
+      } catch (err) {
+        console.error('[AETHER CURRENTS] recorder start failed:', err);
+        recordState.error = 'RECORD START FAILED';
+        recordState.errorUntil = performance.now() + 6000;
+        btnRecord.textContent = '● RECORD';
+      } finally {
+        btnRecord.disabled = false;
+      }
     } else {
-      await recorder.stop();
+      btnRecord.textContent = '● STOP…';
+      btnRecord.disabled = true;
+      // Un-wedgeable guarantee: even if stop()'s cleanup somehow hangs
+      // (it's written to be defensive — see recorder.js — but this is the
+      // last line of defense), force the button back to idle so it never
+      // sticks on "● STOP" with no working path back.
+      const watchdog = setTimeout(() => {
+        console.error('[AETHER CURRENTS] recorder stop() did not settle in time — forcing UI reset');
+        recordState.error = 'STOP TIMED OUT';
+        recordState.errorUntil = performance.now() + 6000;
+        btnRecord.textContent = '● RECORD';
+        btnRecord.disabled = false;
+        mapper.recording = false;
+      }, 8000);
+      try {
+        await recorder.stop();
+      } catch (err) {
+        console.error('[AETHER CURRENTS] recorder stop failed:', err);
+        recordState.error = 'STOP FAILED — recording lost';
+        recordState.errorUntil = performance.now() + 6000;
+        btnRecord.textContent = '● RECORD';
+        mapper.recording = false;
+      } finally {
+        clearTimeout(watchdog);
+        btnRecord.disabled = false;
+      }
     }
   });
 
   btnSaveVideo.addEventListener('click', () => {
-    if (!lastExport) return;
+    if (!lastExport || !lastExport.webmBlob) return;
     downloadBlob(lastExport.webmBlob, lastExport.filename.webm);
   });
 

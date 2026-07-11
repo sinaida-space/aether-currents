@@ -1,0 +1,14 @@
+{
+  "name": "AETHER CURRENTS",
+  "short_name": "AETHER CURRENTS",
+  "description": "Conduct sound with your hands — a browser-based instrument driven by on-device hand tracking, granular synthesis, and live visuals.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "assets/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

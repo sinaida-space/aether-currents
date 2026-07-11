@@ -84,7 +84,7 @@ async function runProbeAndShowModes() {
 // ---------------------------------------------------------------------------
 
 const BOOT_LINES = [
-  { text: 'AETHER BIOS v3.1 — (C) SINAIDA SYSTEMS' },
+  { text: 'AETHER BIOS v3.1.1 — (C) SINAIDA SYSTEMS' },
   { memory: true },
   { text: 'AETHER SOUND DRIVER ........ OK' },
   { text: 'HAND TRACKING MODULE ....... OK' },

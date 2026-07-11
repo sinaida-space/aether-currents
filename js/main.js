@@ -271,26 +271,62 @@ btnRetryCamera.addEventListener('click', () => {
   }
 });
 
+function currentFullscreenElement() {
+  return document.fullscreenElement || document.webkitFullscreenElement || null;
+}
+
 function updateFullscreenLabel() {
-  btnFullscreen.textContent = document.fullscreenElement ? '⛶ EXIT' : '⛶ FULLSCREEN';
+  btnFullscreen.textContent = currentFullscreenElement() ? '⛶ EXIT' : '⛶ FULLSCREEN';
+}
+
+function requestFullscreenOn(el) {
+  if (el.requestFullscreen) return el.requestFullscreen();
+  if (el.webkitRequestFullscreen) return el.webkitRequestFullscreen();
+  return Promise.reject(new Error('Fullscreen API unsupported'));
+}
+
+function exitFullscreenCompat() {
+  if (document.exitFullscreen) return document.exitFullscreen();
+  if (document.webkitExitFullscreen) return document.webkitExitFullscreen();
+  return Promise.resolve();
+}
+
+// iOS Safari has no Fullscreen API for arbitrary elements (only <video>).
+// Detect that up front and hide the button rather than offer a dead control;
+// the mobile CSS already maximizes the layout as a fallback.
+const supportsFullscreen = !!(
+  document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen
+);
+if (!supportsFullscreen) {
+  btnFullscreen.style.display = 'none';
 }
 
 btnFullscreen.addEventListener('click', () => {
-  if (document.fullscreenElement) {
-    document.exitFullscreen();
+  if (currentFullscreenElement()) {
+    exitFullscreenCompat().catch(() => {});
   } else {
-    document.documentElement.requestFullscreen().catch(() => {});
+    Promise.resolve(requestFullscreenOn(document.documentElement))
+      .then(() => {
+        // Best-effort landscape lock — unsupported on many browsers/orientations.
+        if (screen.orientation && screen.orientation.lock) {
+          screen.orientation.lock('landscape').catch(() => {});
+        }
+      })
+      .catch((err) => {
+        hudStatus.textContent = `fullscreen unavailable — ${err.message || err}`;
+      });
   }
 });
 
 document.addEventListener('fullscreenchange', updateFullscreenLabel);
+document.addEventListener('webkitfullscreenchange', updateFullscreenLabel);
 updateFullscreenLabel();
 
 const btnHome = document.getElementById('btn-home');
 btnHome.addEventListener('click', () => {
   // Full reload cleanly tears down camera/audio/tracker state; consent is
   // already persisted, so this lands straight back on the mode-select screen.
-  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  if (currentFullscreenElement()) exitFullscreenCompat().catch(() => {});
   location.reload();
 });
 

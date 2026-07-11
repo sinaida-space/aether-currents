@@ -16,6 +16,10 @@ const GESTURE_LINES_NARROW = [
   'HANDS APART:FILTER+SPACE · FIST:FREEZE · FLICK OPEN:BURST',
 ];
 
+// A minor pentatonic + octave, 6 quantized bands — mirrors mapping.js SCALE.
+const NOTE_NAMES = ['A', 'C', 'D', 'E', 'G', 'A'];
+const BAND_COUNT = 6;
+
 function fmt2(x) {
   // 0.42 -> ".42", -0.4 -> "-.40"
   if (x == null || Number.isNaN(x)) return '.00';
@@ -113,6 +117,12 @@ export class Hud {
     const uiClearance = Math.round(58 * dpr);
     const bottomLine = H - uiClearance;
 
+    // pitch bands + octave + beat pulse — only while a hand is tracked.
+    const hands = s.hands || {};
+    if (hands.left || hands.right) {
+      this._drawBands(ctx, s, dpr, W, bottomLine, now, blinkOn);
+    }
+
     // camcorder OSD — only while the cam background is on and the toggle is set.
     // Composited into the hud canvas, so it lands in recordings automatically.
     if (osd && osd.osdOn && osd.camOn) {
@@ -184,5 +194,64 @@ export class Hud {
     }
     ctx.textAlign = 'left';
     ctx.shadowBlur = 0;
+  }
+
+  // 6 thin band-separator lines (pitch quantization), note names, octave
+  // indicator, and a beat pulse dot. Right-side column, sparse by design.
+  _drawBands(ctx, s, dpr, W, bottomLine, now, blinkOn) {
+    const pad = Math.round(18 * dpr);
+    const colW = Math.round(72 * dpr);
+    const lineX0 = W - pad - colW;
+    const lineX1 = W - pad - Math.round(28 * dpr);
+    const top = Math.round(70 * dpr);
+    const bottom = bottomLine - Math.round(90 * dpr);
+    const span = Math.max(1, bottom - top);
+    const band = s.pitchBand;
+
+    ctx.save();
+    ctx.shadowBlur = 0;
+
+    for (let b = 0; b < BAND_COUNT; b++) {
+      const centerFrac = 1 - (b + 0.5) / BAND_COUNT; // b=5 (top note) near y=0
+      const y = top + centerFrac * span;
+      const active = b === band;
+      ctx.strokeStyle = active ? RED : GESTURE_NORMAL;
+      ctx.lineWidth = active ? 2 * dpr : 1 * dpr;
+      ctx.beginPath();
+      ctx.moveTo(lineX0, y);
+      ctx.lineTo(lineX1, y);
+      ctx.stroke();
+
+      const noteFontPx = Math.max(11, Math.round(13 * dpr));
+      ctx.font = `${noteFontPx}px "VT323", "Courier New", monospace`;
+      ctx.textAlign = 'right';
+      ctx.fillStyle = active ? RED : DIM;
+      ctx.fillText(NOTE_NAMES[b], lineX1 + Math.round(20 * dpr), y - noteFontPx / 2);
+    }
+
+    // octave indicator, above the band column
+    const oct = s.octaveShift || 0;
+    const octLabel = oct > 0 ? '+1' : oct < 0 ? '-1' : '0';
+    const octFontPx = Math.max(12, Math.round(14 * dpr));
+    ctx.font = `${octFontPx}px "VT323", "Courier New", monospace`;
+    ctx.textAlign = 'right';
+    ctx.fillStyle = CYAN;
+    ctx.fillText(`OCT ${octLabel}`, lineX1 + Math.round(20 * dpr), top - octFontPx - Math.round(6 * dpr));
+
+    // beat pulse dot — brightest on the downbeat, fading across the phase.
+    if (s.beatOn && s.beatPhase) {
+      const phase = s.beatPhase.phase || 0;
+      const alpha = Math.max(0, 1 - phase);
+      const r = Math.round(5 * dpr);
+      const cx = lineX1 + Math.round(20 * dpr) - r;
+      const cy = top - octFontPx - Math.round(6 * dpr) - octFontPx - r * 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(0,229,255,${(0.25 + 0.75 * alpha).toFixed(2)})`;
+      ctx.fill();
+    }
+
+    ctx.textAlign = 'left';
+    ctx.restore();
   }
 }

@@ -330,12 +330,34 @@ const GENERATORS = [
   { id: 'voxel', name: 'VOXEL GLITCH', gen: genVoxel },
 ];
 
-// Render all 10 in sequence. Returns [{id, name, buffer}].
-export async function generateLibrary(/* audioContext (unused: rendered offline) */) {
+const VOICE_ASSET_URL = new URL('../../assets/audio/open-your-heart.m4a', import.meta.url);
+
+// Fetch + decode the built-in voice asset. Unlike the synths above this is a
+// real file, decoded through the live AudioContext (not offline-rendered).
+// Decode/fetch failure is non-fatal — the caller just skips this entry.
+async function loadVoiceSample(audioContext) {
+  const res = await fetch(VOICE_ASSET_URL);
+  if (!res.ok) throw new Error(`voice asset fetch failed: ${res.status}`);
+  const arr = await res.arrayBuffer();
+  const buffer = await audioContext.decodeAudioData(arr);
+  return { id: 'voice', name: 'OPEN YOUR HEART ▸ VOICE', buffer };
+}
+
+// Render all 10 synths in sequence, then append the built-in voice sample.
+// Returns [{id, name, buffer}].
+export async function generateLibrary(audioContext) {
   const out = [];
   for (const g of GENERATORS) {
     const buffer = await g.gen();
     out.push({ id: g.id, name: g.name, buffer });
+  }
+  if (audioContext) {
+    try {
+      out.push(await loadVoiceSample(audioContext));
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[AETHER CURRENTS] voice sample load failed, skipping:', err);
+    }
   }
   return out;
 }

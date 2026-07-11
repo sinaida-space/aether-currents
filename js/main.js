@@ -382,6 +382,57 @@ const btnSaveAudio = document.getElementById('btn-save-audio');
 const btnCopyCredit = document.getElementById('btn-copy-credit');
 const btnCloseExport = document.getElementById('btn-close-export');
 
+// ---------------------------------------------------------------------------
+// Task 4 — runtime perf watchdog: FULL mode under ~45fps sustained through
+// the first 15s after boot -> dismissible toast offering a LIGHT-mode switch.
+// FULL-mode-only, fires at most once per page-load session.
+// ---------------------------------------------------------------------------
+
+const perfToast = document.getElementById('perf-toast');
+const btnPerfSwitch = document.getElementById('btn-perf-switch');
+const btnPerfDismiss = document.getElementById('btn-perf-dismiss');
+
+const PERF_WATCHDOG_WINDOW_MS = 15000;
+const PERF_WATCHDOG_SAMPLE_MS = 1000;
+const PERF_WATCHDOG_FPS_THRESHOLD = 45;
+const PERF_WATCHDOG_LOW_FRACTION = 0.6; // majority of samples must be under threshold
+let perfWatchdogFired = false;
+
+function showPerfToast() {
+  if (perfWatchdogFired) return;
+  perfWatchdogFired = true;
+  perfToast.style.display = 'block';
+}
+
+btnPerfSwitch.addEventListener('click', () => {
+  storeMode('light');
+  location.reload();
+});
+btnPerfDismiss.addEventListener('click', () => {
+  perfToast.style.display = 'none';
+});
+
+// Samples renderer.fps (EMA over true frame interval, see renderer.js frame())
+// once per second for 15s. Triggers only on a sustained shortfall — both the
+// window average and a majority of individual samples must be under the
+// threshold — so a single slow-load stutter doesn't false-positive.
+function startPerfWatchdog(renderer) {
+  if (perfWatchdogFired) return;
+  const samples = [];
+  const startTime = performance.now();
+  const timer = setInterval(() => {
+    if (renderer.fps > 0) samples.push(renderer.fps);
+    if (performance.now() - startTime < PERF_WATCHDOG_WINDOW_MS) return;
+    clearInterval(timer);
+    if (perfWatchdogFired || samples.length === 0) return;
+    const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
+    const lowFraction = samples.filter((f) => f < PERF_WATCHDOG_FPS_THRESHOLD).length / samples.length;
+    if (avg < PERF_WATCHDOG_FPS_THRESHOLD && lowFraction >= PERF_WATCHDOG_LOW_FRACTION) {
+      showPerfToast();
+    }
+  }, PERF_WATCHDOG_SAMPLE_MS);
+}
+
 const CREDIT_LINE = 'Made with AETHER CURRENTS by Sinaida — sinaida.eu';
 const MIC_LABEL = '▸ RECORD MIC (4S)';
 
@@ -455,6 +506,8 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
 
   tracker.start();
   mapper.start();
+
+  if (mode === 'full') startPerfWatchdog(renderer);
 
   window.addEventListener('resize', () => renderer.resize());
 

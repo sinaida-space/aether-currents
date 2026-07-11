@@ -77,14 +77,15 @@ export class Hud {
     ctx.shadowBlur = 8 * dpr;
 
     let y = pad;
+    ctx.textAlign = 'right';
     const line = (text, color) => {
       ctx.fillStyle = color;
       ctx.shadowColor = color;
-      ctx.fillText(text, pad, y);
+      ctx.fillText(text, W - pad, y);
       y += lh;
     };
 
-    // top-left system block
+    // top-right system block
     line(`AETHER CURRENTS v${VERSION}`, WHITE);
 
     const modeShort = (s.modeLabel || 'FULL MODE').replace(' MODE', '');
@@ -230,12 +231,12 @@ export class Hud {
   }
 
   // 6 thin band-separator lines (pitch quantization), note names, octave
-  // indicator, and a beat pulse dot. Right-side column, sparse by design.
+  // indicator, and a beat pulse dot. Left-side column, sparse by design.
   _drawBands(ctx, s, dpr, W, bottomLine, now, blinkOn) {
     const pad = Math.round(18 * dpr);
     const colW = Math.round(72 * dpr);
-    const lineX0 = W - pad - colW;
-    const lineX1 = W - pad - Math.round(28 * dpr);
+    const lineX0 = pad + colW;
+    const lineX1 = pad + Math.round(28 * dpr);
     const top = Math.round(90 * dpr);
     const bottom = bottomLine - Math.round(90 * dpr);
     const span = Math.max(1, bottom - top);
@@ -266,41 +267,41 @@ export class Hud {
         ctx.lineWidth = 2 * dpr;
         ctx.beginPath();
         ctx.moveTo(lineX0, y);
-        ctx.lineTo(lineX0 + (lineX1 - lineX0) * 0.4, y);
+        ctx.lineTo(lineX0 - (lineX0 - lineX1) * 0.4, y);
         ctx.stroke();
       }
 
       const noteFontPx = Math.max(11, Math.round(13 * dpr));
       ctx.font = `${noteFontPx}px "VT323", "Courier New", monospace`;
-      ctx.textAlign = 'right';
+      ctx.textAlign = 'left';
       ctx.fillStyle = active ? RED : pending ? 'rgba(0,229,255,0.75)' : DIM;
-      ctx.fillText(noteNames[b], lineX1 + Math.round(20 * dpr), y - noteFontPx / 2);
+      ctx.fillText(noteNames[b], lineX1 - Math.round(20 * dpr), y - noteFontPx / 2);
     }
 
     // scale + key label, above the band column (cycled via S / K keys, or the
     // SCALE ui-bar button — see main.js).
     const scaleFontPx = Math.max(11, Math.round(13 * dpr));
     ctx.font = `${scaleFontPx}px "VT323", "Courier New", monospace`;
-    ctx.textAlign = 'right';
+    ctx.textAlign = 'left';
     ctx.fillStyle = CYAN;
     const scaleLabel = `${s.rootKeyName || 'A'} ${s.scaleLabel || 'MIN PENT'}`;
-    ctx.fillText(scaleLabel, lineX1 + Math.round(20 * dpr), top - scaleFontPx * 2 - Math.round(10 * dpr));
+    ctx.fillText(scaleLabel, lineX1 - Math.round(20 * dpr), top - scaleFontPx * 2 - Math.round(10 * dpr));
 
     // octave indicator, above the band column
     const oct = s.octaveShift || 0;
     const octLabel = oct > 0 ? '+1' : oct < 0 ? '-1' : '0';
     const octFontPx = Math.max(12, Math.round(14 * dpr));
     ctx.font = `${octFontPx}px "VT323", "Courier New", monospace`;
-    ctx.textAlign = 'right';
+    ctx.textAlign = 'left';
     ctx.fillStyle = CYAN;
-    ctx.fillText(`OCT ${octLabel}`, lineX1 + Math.round(20 * dpr), top - octFontPx - Math.round(6 * dpr));
+    ctx.fillText(`OCT ${octLabel}`, lineX1 - Math.round(20 * dpr), top - octFontPx - Math.round(6 * dpr));
 
     // beat pulse dot — brightest on the downbeat, fading across the phase.
     if (s.beatOn && s.beatPhase) {
       const phase = s.beatPhase.phase || 0;
       const alpha = Math.max(0, 1 - phase);
       const r = Math.round(5 * dpr);
-      const cx = lineX1 + Math.round(20 * dpr) - r;
+      const cx = lineX1 - Math.round(20 * dpr) + r;
       const cy = top - octFontPx - Math.round(6 * dpr) - octFontPx - r * 2;
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);

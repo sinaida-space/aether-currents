@@ -230,6 +230,14 @@ function glyphLoop() {
 }
 glyphLoop();
 
+// Respawn-safe glyphs on rotate/resize: the side-band % geometry is meaningless
+// once the aspect ratio flips, so clear stale glyphs and let the loop respawn.
+window.addEventListener('resize', () => {
+  if (!asciiGlyphs || (welcome && welcome.style.display === 'none')) return;
+  asciiGlyphs.innerHTML = '';
+  activeGlyphs = 0;
+});
+
 async function startWithMode(mode) {
   pendingMode = mode;
   storeMode(mode);

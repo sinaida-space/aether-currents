@@ -333,6 +333,15 @@ export class GranularEngine {
     return this._beat ? this._beat.running : false;
   }
 
+  // UI-only BPM control (60-180). Recomputes the 8th-note grid going forward
+  // without resetting phase/step, so a live change doesn't click or jump bar.
+  setBpm(bpm) {
+    const clamped = Math.max(60, Math.min(180, Math.round(bpm)));
+    this._beat.bpm = clamped;
+    this._beat._sec8th = 60 / clamped / 2;
+    return clamped;
+  }
+
   // Beat clock for visuals/HUD, derived from the audio clock.
   getBeatPhase() {
     const beat = this._beat;

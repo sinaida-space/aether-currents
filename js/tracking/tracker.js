@@ -598,6 +598,7 @@ export class HandTracker {
         twoHandDistance,
         rightFingerCount: this._banks.right.fingerCountPersisted,
         chordOn: this._banks.right.fingerCountPersisted === 3,
+        leftFingerCount: this._banks.left.fingerCountPersisted,
         leftIndexPoint: this._banks.left.indexPointPersisted,
       },
     };

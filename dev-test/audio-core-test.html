@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AETHER CURRENTS — audio core test (#12)</title>
+<style>
+  :root { color-scheme: dark; }
+  body { background:#0a0a0a; color:#d8d8d8; font:13px/1.5 ui-monospace,Menlo,Consolas,monospace; margin:0; padding:20px; }
+  h1 { color:#ff2a2a; font-size:15px; letter-spacing:2px; }
+  button { background:#151515; color:#eee; border:1px solid #ff2a2a; padding:6px 12px; margin:2px; font:inherit; cursor:pointer; }
+  button:hover { background:#ff2a2a; color:#000; }
+  button:disabled { opacity:.4; cursor:default; }
+  #log { white-space:pre-wrap; border:1px solid #333; padding:10px; height:300px; overflow:auto; background:#050505; margin-top:12px; }
+  .ok { color:#4caf50; } .bad { color:#ff2a2a; } .dim { color:#888; }
+  #hud { display:flex; gap:24px; margin:10px 0; }
+  .cell { border:1px solid #333; padding:4px 10px; min-width:140px; }
+</style>
+</head>
+<body>
+<h1>AETHER CURRENTS — AUDIO CORE TEST (#12)</h1>
+<p>DoD: click START, no console errors over 15s with beat on + chord toggling. Multi-sample (2 buffers), 116 BPM four-on-the-floor + sidechain.</p>
+<button id="btn-start">START</button>
+<button id="btn-stop" disabled>STOP</button>
+<div id="hud">
+  <div class="cell">beatOn: <span id="h-beat">–</span></div>
+  <div class="cell">phase: <span id="h-phase">–</span></div>
+  <div class="cell">beat#: <span id="h-idx">–</span></div>
+  <div class="cell">chord: <span id="h-chord">–</span></div>
+  <div class="cell">level: <span id="h-level">–</span></div>
+</div>
+<div id="log"></div>
+
+<script type="module">
+import { GranularEngine } from '../js/audio/engine.js';
+
+const logEl = document.getElementById('log');
+let errors = 0;
+function log(msg, cls) {
+  const t = (performance.now() / 1000).toFixed(2).padStart(7);
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = `[${t}] ${msg}`;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+window.addEventListener('error', (e) => { errors++; log('window error: ' + e.message, 'bad'); });
+window.addEventListener('unhandledrejection', (e) => { errors++; log('promise rejection: ' + (e.reason && e.reason.message || e.reason), 'bad'); });
+
+// Build a short synthetic mono AudioBuffer via OfflineAudioContext.
+async function makeBuffer(kind) {
+  const SR = 44100, dur = 2;
+  const Ctx = self.OfflineAudioContext || self.webkitOfflineAudioContext;
+  const off = new Ctx(1, Math.ceil(dur * SR), SR);
+  if (kind === 'sine') {
+    const o = off.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.value = 110;
+    const g = off.createGain();
+    g.gain.value = 0.3;
+    o.connect(g).connect(off.destination);
+    o.start(0); o.stop(dur);
+  } else {
+    const b = off.createBuffer(1, off.length, SR);
+    const d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.3;
+    const src = off.createBufferSource();
+    src.buffer = b;
+    const hp = off.createBiquadFilter();
+    hp.type = 'bandpass'; hp.frequency.value = 1800; hp.Q.value = 1.2;
+    src.connect(hp).connect(off.destination);
+    src.start(0);
+  }
+  return off.startRendering();
+}
+
+let engine, ctx, chordParam, hudTimer, chordTimer, stopTimer;
+let chordState = 0;
+
+document.getElementById('btn-start').addEventListener('click', async () => {
+  document.getElementById('btn-start').disabled = true;
+  try {
+    ctx = new (self.AudioContext || self.webkitAudioContext)();
+    await ctx.resume();
+    log('AudioContext running @ ' + ctx.sampleRate + 'Hz', 'ok');
+
+    engine = await GranularEngine.create(ctx);
+    log('engine created', 'ok');
+
+    const [a, b] = await Promise.all([makeBuffer('sine'), makeBuffer('noise')]);
+    engine.setActiveSamples([a, b]);
+    log('setActiveSamples([sine, noise]) — 2 buffers transferred', 'ok');
+
+    // Drive audible granular output.
+    engine.node.parameters.get('density').value = 24;
+    engine.node.parameters.get('grainSize').value = 0.12;
+    engine.node.parameters.get('gain').value = 0.8;
+    chordParam = engine.node.parameters.get('chord');
+    log('chord param present: ' + (chordParam ? 'yes' : 'NO'), chordParam ? 'ok' : 'bad');
+
+    engine.setBeat(true);
+    log('setBeat(true) — beatOn=' + engine.beatOn, engine.beatOn ? 'ok' : 'bad');
+
+    // Toggle chord every 2s.
+    chordTimer = setInterval(() => {
+      chordState = chordState ? 0 : 1;
+      chordParam.setValueAtTime(chordState, ctx.currentTime);
+      log('chord -> ' + chordState, 'dim');
+    }, 2000);
+
+    // HUD poll.
+    hudTimer = setInterval(() => {
+      const bp = engine.getBeatPhase();
+      document.getElementById('h-beat').textContent = engine.beatOn;
+      document.getElementById('h-phase').textContent = bp.phase.toFixed(3);
+      document.getElementById('h-idx').textContent = bp.beatIndex;
+      document.getElementById('h-chord').textContent = chordState;
+      document.getElementById('h-level').textContent = engine.getLevel().toFixed(3);
+      if (bp.bpm !== 116) log('BAD bpm: ' + bp.bpm, 'bad');
+    }, 100);
+
+    // Quantized burst mid-run to exercise the 8th-note deferral path.
+    setTimeout(() => { engine.burst(); log('burst() (quantized)', 'dim'); }, 4000);
+    setTimeout(() => { engine.burst(); log('burst() (quantized)', 'dim'); }, 9000);
+
+    document.getElementById('btn-stop').disabled = false;
+
+    // Auto verdict at 15s.
+    stopTimer = setTimeout(() => {
+      log('--- 15s elapsed: errors=' + errors + ' ---', errors ? 'bad' : 'ok');
+      log(errors ? 'RESULT: FAIL' : 'RESULT: OK', errors ? 'bad' : 'ok');
+    }, 15000);
+  } catch (err) {
+    errors++;
+    log('EXCEPTION: ' + (err && err.stack || err), 'bad');
+  }
+});
+
+document.getElementById('btn-stop').addEventListener('click', () => {
+  clearInterval(chordTimer); clearInterval(hudTimer); clearTimeout(stopTimer);
+  if (engine) engine.setBeat(false);
+  log('setBeat(false) — beatOn=' + (engine ? engine.beatOn : '?'), 'dim');
+});
+</script>
+</body>
+</html>

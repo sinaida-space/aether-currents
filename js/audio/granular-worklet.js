@@ -11,6 +11,8 @@
 const POOL = 256; // grain slots
 const WIN_SIZE = 4096; // Hann window table length
 const BLOCK = 128; // render quantum
+const MAX_SAMPLES = 4; // active multi-sample set size
+const FIFTH = Math.pow(2, 7 / 12); // perfect-5th ratio for `chord` alternation
 
 // Shared Hann window table (built once for the whole global scope).
 const HANN = new Float32Array(WIN_SIZE);
@@ -29,14 +31,20 @@ class GranularProcessor extends AudioWorkletProcessor {
       { name: 'spread', defaultValue: 0.15, minValue: 0, maxValue: 1, automationRate: 'k-rate' },
       { name: 'pan', defaultValue: 0.5, minValue: 0, maxValue: 1, automationRate: 'k-rate' },
       { name: 'gain', defaultValue: 0.8, minValue: 0, maxValue: 1, automationRate: 'k-rate' },
+      { name: 'chord', defaultValue: 0, minValue: 0, maxValue: 1, automationRate: 'k-rate' },
     ];
   }
 
   constructor() {
     super();
 
-    // Current source buffer (mono). null => silence.
-    this._buf = null;
+    // Active multi-sample set (each mono Float32Array). Pre-allocated fixed array
+    // so setSamples never grows it; `_bufCount` tracks how many slots are live.
+    this._bufs = new Array(MAX_SAMPLES).fill(null);
+    this._bufCount = 0;
+
+    // Chord alternation flag (perfect 5th). Flips each spawn while chord > 0.5.
+    this._chordFlip = false;
 
     // Grain pool — Structure-of-Arrays so no per-grain object is ever allocated.
     this._gActive = new Uint8Array(POOL);
@@ -76,10 +84,32 @@ class GranularProcessor extends AudioWorkletProcessor {
     if (!msg) return;
     switch (msg.type) {
       case 'setSample':
-        // msg.buffer is a transferred Float32Array (mono).
-        this._buf = msg.buffer && msg.buffer.length ? msg.buffer : null;
+        // Back-compat: a single transferred Float32Array (mono) => 1-element set.
         // Existing grains keep their own _gBuf reference and finish on the old buffer.
+        if (msg.buffer && msg.buffer.length) {
+          this._bufs[0] = msg.buffer;
+          for (let k = 1; k < MAX_SAMPLES; k++) this._bufs[k] = null;
+          this._bufCount = 1;
+        } else {
+          for (let k = 0; k < MAX_SAMPLES; k++) this._bufs[k] = null;
+          this._bufCount = 0;
+        }
         break;
+      case 'setSamples': {
+        // msg.buffers is an array of 1..4 transferred Float32Arrays (mono).
+        const list = msg.buffers;
+        let cnt = 0;
+        if (list && list.length) {
+          const max = list.length < MAX_SAMPLES ? list.length : MAX_SAMPLES;
+          for (let k = 0; k < max; k++) {
+            const b = list[k];
+            if (b && b.length) this._bufs[cnt++] = b;
+          }
+        }
+        for (let k = cnt; k < MAX_SAMPLES; k++) this._bufs[k] = null;
+        this._bufCount = cnt;
+        break;
+      }
       case 'freeze':
         this._frozen = !!msg.value;
         break;
@@ -104,8 +134,11 @@ class GranularProcessor extends AudioWorkletProcessor {
   }
 
   // Spawn one grain at the given position (0..1) with the given spread & pan width.
+  // Picks a random buffer from the active set (grain-level interleave).
   _spawn(posNorm, spread, panWidth, dur, rate) {
-    const buf = this._buf;
+    const cnt = this._bufCount;
+    if (cnt < 1) return;
+    const buf = this._bufs[(Math.random() * cnt) | 0];
     if (!buf) return;
     const blen = buf.length;
     if (blen < 4) return;
@@ -154,6 +187,7 @@ class GranularProcessor extends AudioWorkletProcessor {
     const spread = parameters.spread[0];
     const panW = parameters.pan[0];
     const gain = parameters.gain[0];
+    const chord = parameters.chord[0];
 
     // Freeze: hold the last un-frozen position; ignore live position while frozen.
     let posNorm;
@@ -167,12 +201,19 @@ class GranularProcessor extends AudioWorkletProcessor {
     const durSamples = grainSize * sampleRate;
 
     // --- Scheduler: spawn grains for this block ---
-    if (this._buf) {
+    const chordOn = chord > 0.5;
+    if (this._bufCount > 0) {
       // Normal density-driven scheduling.
       this._nextGrain -= n;
       let guard = 0;
       while (this._nextGrain <= 0 && guard < 64) {
-        this._spawn(posNorm, spread, panW, durSamples, pitch);
+        // Chord: alternate spawns between the base rate and a perfect 5th up.
+        let rate = pitch;
+        if (chordOn) {
+          if (this._chordFlip) rate = pitch * FIFTH;
+          this._chordFlip = !this._chordFlip;
+        }
+        this._spawn(posNorm, spread, panW, durSamples, rate);
         const io = sampleRate / density; // inter-onset in samples
         this._nextGrain += io * (0.7 + Math.random() * 0.6); // ±30% humanization
         guard++;

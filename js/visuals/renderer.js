@@ -52,7 +52,7 @@ export class Renderer {
 
     const gl = glCanvas.getContext('webgl2', {
       antialias: false, alpha: false, depth: false,
-      premultipliedAlpha: false, preserveDrawingBuffer: false,
+      premultipliedAlpha: false, preserveDrawingBuffer: true,
     });
     if (!gl) throw new Error('WebGL2 unavailable');
     this.gl = gl;

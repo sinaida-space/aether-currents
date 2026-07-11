@@ -2,6 +2,8 @@
 // Pure text, white/red/cyan monospace, palette-matched glow. Redraws at <=10Hz.
 // Everything the recording needs is painted here (no HTML overlays).
 
+import { VERSION } from '../version.js';
+
 const WHITE = '#f2f2f2';
 const RED = '#ff2a2a';
 const CYAN = '#00e5ff';
@@ -81,7 +83,7 @@ export class Hud {
     };
 
     // top-left system block
-    line('AETHER CURRENTS v2.1', WHITE);
+    line(`AETHER CURRENTS v${VERSION}`, WHITE);
 
     const modeShort = (s.modeLabel || 'FULL MODE').replace(' MODE', '');
     const trk = Math.round(s.trackingFps || 0);
@@ -98,7 +100,10 @@ export class Hud {
     if (s.frozen && blinkOn) line('[FROZEN]', RED);
     else if (s.frozen) y += lh; // keep layout stable while blinking
 
-    if (s.recording) line('● REC', RED);
+    // Suppress this fallback REC when the camcorder OSD is already showing
+    // its own top-right ● REC — avoids a doubled REC indicator on screen.
+    const osdRecActive = !!(osd && osd.osdOn && osd.camOn);
+    if (s.recording && !osdRecActive) line('● REC', RED);
 
     // centered SIGNAL LOST banner
     if (s.stale && blinkOn) {

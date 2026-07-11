@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AETHER CURRENTS — recorder test harness (#13)</title>
+<style>
+  :root { color-scheme: dark; }
+  body { background:#0a0a0a; color:#d8d8d8; font:13px/1.5 ui-monospace,Menlo,Consolas,monospace; margin:0; padding:20px; }
+  h1 { color:#ff2a2a; font-size:15px; letter-spacing:2px; }
+  button { background:#151515; color:#eee; border:1px solid #ff2a2a; padding:6px 12px; margin:2px; font:inherit; cursor:pointer; }
+  button:hover { background:#ff2a2a; color:#000; }
+  button:disabled { opacity:.4; cursor:default; }
+  #log { white-space:pre-wrap; border:1px solid #333; padding:10px; height:320px; overflow:auto; background:#050505; margin-top:12px; }
+  .ok { color:#4caf50; } .bad { color:#ff2a2a; }
+  #result { font-size:16px; font-weight:bold; margin-top:10px; }
+  canvas { border:1px solid #333; margin-top:8px; }
+</style>
+</head>
+<body>
+<h1>AETHER CURRENTS — RECORDER TEST HARNESS (#13)</h1>
+<p>No camera needed. Fake glCanvas (animating rect) + fake HUD + oscillator audio drive the real Recorder for a 3s take.
+DoD: kind=mp4 (WebCodecs) or webm (fallback), <code>ftyp</code> present at offset 4 for mp4, video+wav blob sizes &gt; 0, zero console errors.</p>
+
+<div>
+  <button id="btn-run">RUN 3s RECORD TEST</button>
+</div>
+
+<canvas id="fake-gl" width="640" height="360"></canvas>
+
+<div id="result">—</div>
+<div id="log"></div>
+
+<script type="module">
+import { Recorder } from '../js/recorder.js';
+
+const logEl = document.getElementById('log');
+const resultEl = document.getElementById('result');
+let errorCount = 0;
+
+function log(m, cls) {
+  const s = document.createElement('div');
+  if (cls) s.className = cls;
+  s.textContent = m;
+  logEl.appendChild(s);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+window.addEventListener('error', (e) => {
+  errorCount++;
+  log('CONSOLE ERROR: ' + e.message, 'bad');
+});
+window.addEventListener('unhandledrejection', (e) => {
+  errorCount++;
+  log('PROMISE REJECTION: ' + (e.reason && e.reason.message || e.reason), 'bad');
+});
+
+// Wrap console.error so it also counts toward the DoD's "no console errors".
+const origConsoleError = console.error.bind(console);
+console.error = (...args) => {
+  errorCount++;
+  log('console.error: ' + args.map(String).join(' '), 'bad');
+  origConsoleError(...args);
+};
+
+async function blobHasFtypAtOffset4(blob) {
+  const head = await blob.slice(0, 12).arrayBuffer();
+  const bytes = new Uint8Array(head);
+  const tag = String.fromCharCode(bytes[4], bytes[5], bytes[6], bytes[7]);
+  return tag === 'ftyp';
+}
+
+document.getElementById('btn-run').addEventListener('click', async () => {
+  document.getElementById('btn-run').disabled = true;
+  resultEl.textContent = 'running…';
+  resultEl.className = '';
+  logEl.innerHTML = '';
+  errorCount = 0;
+
+  try {
+    // --- fake glCanvas: animating rect, no camera/GL needed ---
+    const glCanvas = document.getElementById('fake-gl');
+    const glCtx = glCanvas.getContext('2d');
+    let rafId = null;
+    const animate = () => {
+      const t = performance.now() / 1000;
+      glCtx.fillStyle = '#000';
+      glCtx.fillRect(0, 0, glCanvas.width, glCanvas.height);
+      glCtx.fillStyle = `hsl(${(t * 60) % 360}, 80%, 50%)`;
+      const x = (Math.sin(t) * 0.5 + 0.5) * (glCanvas.width - 80);
+      const y = (Math.cos(t * 1.3) * 0.5 + 0.5) * (glCanvas.height - 80);
+      glCtx.fillRect(x, y, 80, 80);
+      rafId = requestAnimationFrame(animate);
+    };
+    animate();
+
+    // --- fake HUD: blank transparent canvas ---
+    const hudCanvas = document.createElement('canvas');
+    hudCanvas.width = 640;
+    hudCanvas.height = 360;
+
+    // --- fake engine.output: oscillator through a GainNode ---
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    await ctx.resume();
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = 440;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.2;
+    osc.connect(gain);
+    // engine.output stand-in — NOT connected to ctx.destination so the test
+    // page doesn't blast audio; recorder taps this node directly.
+    osc.start();
+
+    log('fake engine/canvas ready. sampleRate=' + ctx.sampleRate);
+    log('WebCodecs available: VideoEncoder=' + !!window.VideoEncoder + ' AudioEncoder=' + !!window.AudioEncoder);
+
+    const recorder = new Recorder({
+      glCanvas,
+      hudCanvas,
+      audioNode: gain,
+      audioContext: ctx,
+      modeLabel: 'LIGHT MODE',
+    });
+
+    log('starting recorder…');
+    await recorder.start();
+    log('recording… (3s)');
+
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    log('stopping recorder…');
+    const result = await recorder.stop();
+
+    cancelAnimationFrame(rafId);
+    osc.stop();
+
+    log('result.videoKind = ' + result.videoKind);
+    log('result.videoBlob.size = ' + result.videoBlob.size + ' bytes (type ' + result.videoBlob.type + ')');
+    log('result.wavBlob.size = ' + result.wavBlob.size + ' bytes');
+    log('result.filename = ' + JSON.stringify(result.filename));
+    log('back-compat: result.webmBlob === result.videoBlob? ' + (result.webmBlob === result.videoBlob));
+    log('back-compat: result.filename.webm = ' + result.filename.webm);
+
+    const videoOk = result.videoBlob && result.videoBlob.size > 0;
+    const wavOk = result.wavBlob && result.wavBlob.size > 0;
+
+    let ftypOk = true; // only required/checked on the mp4 path
+    if (result.videoKind === 'mp4') {
+      ftypOk = await blobHasFtypAtOffset4(result.videoBlob);
+      log('ftyp at offset 4: ' + ftypOk, ftypOk ? 'ok' : 'bad');
+    } else {
+      log('videoKind=webm (WebCodecs unsupported in this browser) — ftyp check skipped', 'ok');
+    }
+
+    const pass = videoOk && wavOk && ftypOk && errorCount === 0;
+
+    if (pass) {
+      resultEl.textContent = 'PASS kind=' + result.videoKind +
+        (result.videoKind === 'mp4' ? ' ftyp=present' : '') +
+        ' video=' + result.videoBlob.size + 'B wav=' + result.wavBlob.size + 'B errors=' + errorCount;
+      resultEl.className = 'ok';
+    } else {
+      resultEl.textContent = 'FAIL kind=' + (result.videoKind || '?') +
+        ' videoOk=' + videoOk + ' wavOk=' + wavOk + ' ftypOk=' + ftypOk + ' errors=' + errorCount;
+      resultEl.className = 'bad';
+    }
+  } catch (err) {
+    errorCount++;
+    log('TEST THREW: ' + (err && err.stack || err), 'bad');
+    resultEl.textContent = 'FAIL (exception) — ' + (err && err.message || err);
+    resultEl.className = 'bad';
+  } finally {
+    document.getElementById('btn-run').disabled = false;
+  }
+});
+
+log('ready. Click RUN to start the 3s record test.');
+</script>
+</body>
+</html>

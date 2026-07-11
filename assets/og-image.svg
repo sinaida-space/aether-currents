@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <defs>
+    <style>
+      @font-face {
+        font-family: 'VT323';
+        src: url('../assets/fonts/VT323-Regular.ttf') format('truetype');
+      }
+      .title { font-family: 'VT323'; fill: #f2f2f2; }
+      .tag { font-family: 'VT323'; fill: #00e5ff; }
+      .credit { font-family: 'VT323'; fill: #7a7a7a; }
+    </style>
+    <pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="4" height="4" fill="#000000"/>
+      <rect width="4" height="1" fill="#ffffff" opacity="0.03"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="630" fill="#000000"/>
+  <rect width="1200" height="630" fill="url(#scan)"/>
+
+  <rect x="24" y="24" width="1152" height="582" fill="none" stroke="#ff2a2a" stroke-width="2"/>
+
+  <!-- scattered sparkle glyphs -->
+  <g>
+    <path d="M120 90 C121.4 100 124 102.6 134 104 C124 105.4 121.4 108 120 118 C118.6 108 116 105.4 106 104 C116 102.6 118.6 100 120 90 Z" fill="#ff2a2a"/>
+    <path d="M1080 520 C1081.6 532 1084.8 535.2 1096 536.8 C1084.8 538.4 1081.6 541.6 1080 552 C1078.4 541.6 1075.2 538.4 1064 536.8 C1075.2 535.2 1078.4 532 1080 520 Z" fill="#00e5ff"/>
+    <path d="M1050 110 C1051 117 1053 119 1060 120 C1053 121 1051 123 1050 130 C1049 123 1047 121 1040 120 C1047 119 1049 117 1050 110 Z" fill="#f2f2f2"/>
+    <circle cx="200" cy="500" r="3" fill="#ff2a2a"/>
+    <circle cx="960" cy="150" r="2.5" fill="#00e5ff"/>
+    <circle cx="90" cy="300" r="2" fill="#f2f2f2"/>
+    <path d="M150 550 L156 550 M153 547 L153 553" stroke="#ff2a2a" stroke-width="2"/>
+    <path d="M1100 380 L1108 380 M1104 376 L1104 384" stroke="#00e5ff" stroke-width="2"/>
+  </g>
+
+  <!-- ECG trace -->
+  <polyline points="60,470 260,470 285,470 300,410 315,530 330,440 345,470 500,470 520,470 535,425 550,505 565,470 1140,470"
+            fill="none" stroke="#ff2a2a" stroke-width="3" opacity="0.85"/>
+
+  <!-- title -->
+  <text x="600" y="270" text-anchor="middle" class="title" font-size="96" letter-spacing="6">AETHER CURRENTS</text>
+  <text x="600" y="330" text-anchor="middle" class="tag" font-size="40">conduct sound with your hands</text>
+
+  <text x="600" y="400" text-anchor="middle" class="credit" font-size="26">on-device hand tracking → granular synthesis → live visuals</text>
+
+  <text x="600" y="590" text-anchor="middle" class="credit" font-size="24">sinaida.eu  ×  telefm.bandcamp.com</text>
+</svg>

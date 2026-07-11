@@ -11,6 +11,7 @@ const TAU_PITCH = 0.08; // gooey portamento between quantized pitch bands
 // A minor pentatonic + octave, 6 quantized bands (semitone offsets).
 const SCALE = [0, 3, 5, 7, 10, 12];
 const OCTAVE_COOLDOWN_MS = 600;
+const CHORD_ARP_HOLD_MS = 300; // left-hand 3-finger hold to flip chord<->arp
 
 // ---- exponential interpolation helpers ----------------------------------
 // lerp(a, b, t) in log-space: a * (b/a)^t
@@ -50,6 +51,10 @@ export class Mapper {
     this._octaveShift = 0; // -1 | 0 | +1
     this._octaveArmed = true; // re-armed only after leftIndexPoint returns to null
     this._octaveCooldownUntil = 0;
+
+    this._chordArp = false; // false = simultaneous dyad, true = legacy alternating arpeggio
+    this._chordArpArmed = true; // re-armed only once left 3-finger pose releases
+    this._chordArpHoldSince = null;
     this._pitchBand = null; // last computed band index, for HUD
 
     // held two-hand values (persist when only one hand present)
@@ -119,6 +124,22 @@ export class Mapper {
       this._octaveShift = Math.max(-1, Math.min(1, this._octaveShift + delta));
       this._octaveCooldownUntil = nowMs + OCTAVE_COOLDOWN_MS;
       this._octaveArmed = false;
+    }
+
+    // --- chord/arp toggle (left-hand 3-finger pose held 300ms, edge-triggered) ---
+    // Distinct hand+timing from the right-hand chordOn (which just enables the
+    // dyad), so playing a right-hand chord never accidentally flips the mode.
+    const lfc = gestures.leftFingerCount;
+    if (lfc !== 3) {
+      this._chordArpArmed = true;
+      this._chordArpHoldSince = null;
+    } else {
+      if (this._chordArpHoldSince == null) this._chordArpHoldSince = nowMs;
+      if (this._chordArpArmed && nowMs - this._chordArpHoldSince >= CHORD_ARP_HOLD_MS) {
+        this._chordArp = !this._chordArp;
+        this.engine.setChordMode(this._chordArp);
+        this._chordArpArmed = false;
+      }
     }
 
     // --- position (right.x) + quantized pitch band (right.y) ---
@@ -201,6 +222,7 @@ export class Mapper {
       octaveShift: this._octaveShift,
       pitchBand: this._pitchBand,
       chordOn: gestures.chordOn,
+      chordArp: this._chordArp,
       beatOn: this.engine.beatOn,
       beatPhase,
       params: {

@@ -12,10 +12,11 @@ const GESTURE_NORMAL = 'rgba(242,242,242,0.55)';
 const GESTURE_DIMMED = 'rgba(242,242,242,0.22)';
 const GESTURE_DIM_AFTER_MS = 60000;
 const GESTURE_LINE_WIDE =
-  'R-HAND XY:POS/PITCH · PINCH:GRAIN · L-HAND Y:DENSITY · HANDS APART:FILTER+SPACE · FIST:FREEZE · FLICK OPEN:BURST';
+  'R-HAND XY:POS/PITCH · PINCH:GRAIN · L-HAND Y:DENSITY · HANDS APART:FILTER+SPACE · FIST:FREEZE · FLICK OPEN:BURST · R-3FING:CHORD · L-3FING HOLD:CHORD/ARP';
 const GESTURE_LINES_NARROW = [
   'R-HAND XY:POS/PITCH · PINCH:GRAIN · L-HAND Y:DENSITY',
   'HANDS APART:FILTER+SPACE · FIST:FREEZE · FLICK OPEN:BURST',
+  'R-3FING:CHORD · L-3FING HOLD:CHORD/ARP',
 ];
 
 // A minor pentatonic + octave, 6 quantized bands — mirrors mapping.js SCALE.
@@ -90,6 +91,7 @@ export class Hud {
     line(`MODE: ${modeShort} ▪ ${Math.round(fps || 0)}FPS ▪ TRK ${trk}FPS`, CYAN);
 
     line(`SMP: ${(s.sampleName || '—').toUpperCase()}`, WHITE);
+    line(`3-FINGER MODE: ${s.chordArp ? 'ARP' : 'CHORD'}`, CYAN);
 
     const p = s.params || {};
     line(

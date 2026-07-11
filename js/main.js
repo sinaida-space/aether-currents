@@ -2,7 +2,7 @@
 // Consent -> system check -> mode select -> camera -> boot hook.
 
 import { runSystemCheck } from './syscheck.js';
-import { GranularEngine, generateLibrary, loadUserFile, captureMic } from './audio/engine.js';
+import { GranularEngine, generateLibrary, captureMic } from './audio/engine.js';
 import { HandTracker } from './tracking/tracker.js';
 import { Renderer } from './visuals/renderer.js';
 import { Mapper } from './mapping.js';
@@ -365,11 +365,14 @@ const OSD_KEY = 'ac.osd';
 
 const sampleMenu = document.getElementById('sample-menu');
 const sampleList = document.getElementById('sample-list');
-const sampleUploadInput = document.getElementById('sample-upload-input');
 const btnCloseSamples = document.getElementById('btn-close-samples');
 
 const micCountdown = document.getElementById('mic-countdown');
 const micCountdownNum = document.getElementById('mic-countdown-num');
+const micReview = document.getElementById('mic-review');
+const btnMicPlay = document.getElementById('btn-mic-play');
+const btnMicKeep = document.getElementById('btn-mic-keep');
+const btnMicRedo = document.getElementById('btn-mic-redo');
 
 const recordExport = document.getElementById('record-export');
 const btnSaveVideo = document.getElementById('btn-save-video');
@@ -378,7 +381,6 @@ const btnCopyCredit = document.getElementById('btn-copy-credit');
 const btnCloseExport = document.getElementById('btn-close-export');
 
 const CREDIT_LINE = 'Made with AETHER CURRENTS by Sinaida — sinaida.eu';
-const UPLOAD_LABEL = '▸ UPLOAD FILE...';
 const MIC_LABEL = '▸ RECORD MIC (4S)';
 
 function progressBar(frac) {
@@ -512,11 +514,6 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
       sampleList.appendChild(li);
     });
 
-    const uploadLi = document.createElement('li');
-    uploadLi.textContent = UPLOAD_LABEL;
-    uploadLi.addEventListener('click', () => sampleUploadInput.click());
-    sampleList.appendChild(uploadLi);
-
     const micLi = document.createElement('li');
     micLi.textContent = MIC_LABEL;
     micLi.addEventListener('click', () => recordMicSample());
@@ -590,43 +587,76 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
   });
   btnCloseSamples.addEventListener('click', closeSampleMenu);
 
-  sampleUploadInput.addEventListener('change', async () => {
-    const file = sampleUploadInput.files && sampleUploadInput.files[0];
-    sampleUploadInput.value = '';
-    if (!file) return;
-    try {
-      const buffer = await loadUserFile(audioContext, file);
-      const name = file.name.replace(/\.[^.]+$/, '').toUpperCase().slice(0, 24);
-      addCustomEntry({ id: `custom-${Date.now()}`, name: name || 'UPLOADED', buffer });
-      closeSampleMenu();
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('[AETHER CURRENTS] upload decode failed:', err);
-    }
-  });
+  // Mic-only sampling (no file upload — see licensing note in the sample
+  // menu): capture, then always review with playback before it's added to
+  // the library, so there's no "what did I just record?" black box.
+  let pendingMicBuffer = null;
 
-  async function recordMicSample() {
-    closeSampleMenu();
+  function playBuffer(buffer) {
+    const src = audioContext.createBufferSource();
+    src.buffer = buffer;
+    src.connect(audioContext.destination);
+    src.start(0);
+  }
+
+  function showMicReview() {
+    micCountdownNum.style.display = 'none';
+    micReview.style.display = 'block';
+  }
+
+  function hideMicReview() {
+    micReview.style.display = 'none';
+    micCountdownNum.style.display = 'block';
+    micCountdown.style.display = 'none';
+    pendingMicBuffer = null;
+  }
+
+  async function captureOnce() {
     micCountdown.style.display = 'flex';
+    micCountdownNum.style.display = 'block';
+    micReview.style.display = 'none';
     for (const n of [3, 2, 1]) {
       micCountdownNum.textContent = String(n);
       await new Promise((res) => setTimeout(res, 1000));
     }
     micCountdownNum.textContent = '●REC';
     try {
-      const buffer = await captureMic(audioContext, 4);
-      addCustomEntry({ id: `custom-${Date.now()}`, name: 'MIC CAPTURE', buffer });
+      pendingMicBuffer = await captureMic(audioContext, 4);
+      showMicReview();
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[AETHER CURRENTS] mic capture failed:', err);
-    } finally {
-      micCountdown.style.display = 'none';
+      hideMicReview();
     }
   }
+
+  function recordMicSample() {
+    closeSampleMenu();
+    captureOnce();
+  }
+
+  btnMicPlay.addEventListener('click', () => {
+    if (pendingMicBuffer) playBuffer(pendingMicBuffer);
+  });
+  btnMicKeep.addEventListener('click', () => {
+    if (pendingMicBuffer) {
+      addCustomEntry({ id: `custom-${Date.now()}`, name: 'MIC CAPTURE', buffer: pendingMicBuffer });
+    }
+    hideMicReview();
+  });
+  btnMicRedo.addEventListener('click', () => {
+    pendingMicBuffer = null;
+    captureOnce();
+  });
 
   // ---- keyboard shortcuts -------------------------------------------------
 
   document.addEventListener('keydown', (e) => {
+    if (micReview.style.display !== 'none') {
+      if (e.key === 'Enter') { btnMicKeep.click(); return; }
+      if (e.key === 'r' || e.key === 'R') { btnMicRedo.click(); return; }
+      if (e.key === 'Escape') { hideMicReview(); return; }
+    }
     if (e.key === 'Escape') {
       if (sampleMenu.style.display !== 'none') closeSampleMenu();
       if (recordExport.style.display !== 'none') recordExport.style.display = 'none';
@@ -646,13 +676,19 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     if (e.key === 'b' || e.key === 'B') {
       toggleBeat();
     }
+    if (e.key === '[' || e.key === ']') {
+      nudgeBpm(e.key === ']' ? 5 : -5);
+    }
   });
 
-  // ---- BEAT toggle ----------------------------------------------------------
+  // ---- BEAT toggle + BPM control ---------------------------------------------
+  // UI-only per product decision: no gesture, no auto-tap-tempo. Click toggles
+  // beat on/off; shift-click (or long-press on touch) opens exact BPM entry;
+  // [ / ] nudge by 5. BPM is always shown so it's adjustable before beat is on.
 
   function updateBeatButton() {
     const bpm = Math.round(engine.getBeatPhase().bpm);
-    btnBeat.textContent = engine.beatOn ? `▪ BEAT ${bpm}` : '▸ BEAT';
+    btnBeat.textContent = engine.beatOn ? `▪ BEAT ${bpm}` : `▸ BEAT ${bpm}`;
   }
 
   function toggleBeat() {
@@ -660,7 +696,37 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     updateBeatButton();
   }
 
-  btnBeat.addEventListener('click', toggleBeat);
+  function nudgeBpm(delta) {
+    const current = Math.round(engine.getBeatPhase().bpm);
+    engine.setBpm(current + delta);
+    updateBeatButton();
+  }
+
+  function promptBpm() {
+    const current = Math.round(engine.getBeatPhase().bpm);
+    const input = window.prompt('BPM (60-180):', String(current));
+    if (input == null) return;
+    const parsed = parseInt(input, 10);
+    if (!Number.isFinite(parsed)) return;
+    engine.setBpm(parsed);
+    updateBeatButton();
+  }
+
+  let btnBeatPressTimer = null;
+  let btnBeatLongPressed = false;
+  btnBeat.addEventListener('click', (e) => {
+    if (btnBeatLongPressed) { btnBeatLongPressed = false; return; } // swallow synthesized click after long-press
+    if (e.shiftKey) promptBpm();
+    else toggleBeat();
+  });
+  // Long-press (touch has no shift-click) opens the same BPM prompt.
+  btnBeat.addEventListener('touchstart', () => {
+    btnBeatLongPressed = false;
+    btnBeatPressTimer = setTimeout(() => { btnBeatLongPressed = true; promptBpm(); }, 550);
+  }, { passive: true });
+  btnBeat.addEventListener('touchend', () => {
+    if (btnBeatPressTimer) { clearTimeout(btnBeatPressTimer); btnBeatPressTimer = null; }
+  });
   updateBeatButton();
 
   // ---- recorder -----------------------------------------------------------

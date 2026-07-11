@@ -8,8 +8,27 @@ const TAU = 0.05;
 const TAU_POSITION = 0.08;
 const TAU_PITCH = 0.08; // gooey portamento between quantized pitch bands
 
-// A minor pentatonic + octave, 6 quantized bands (semitone offsets).
-const SCALE = [0, 3, 5, 7, 10, 12];
+// Scale library — 6 quantized bands each (semitone offsets from root).
+// minorPentatonic is the original A minor pentatonic pattern, unchanged.
+// naturalMinor drops the 6th degree (keeps 1,2,b3,4,5,b7+octave) to fit
+// 6 bands while still reading clearly as "minor" against the pentatonics/blues.
+export const SCALE_DEFS = {
+  minorPentatonic: [0, 3, 5, 7, 10, 12],
+  blues: [0, 3, 5, 6, 7, 10],
+  majorPentatonic: [0, 2, 4, 7, 9, 12],
+  naturalMinor: [0, 2, 3, 5, 7, 10],
+};
+export const SCALE_IDS = ['minorPentatonic', 'blues', 'majorPentatonic', 'naturalMinor'];
+export const SCALE_LABELS = {
+  minorPentatonic: 'MIN PENT',
+  blues: 'BLUES',
+  majorPentatonic: 'MAJ PENT',
+  naturalMinor: 'NAT MIN',
+};
+// Chromatic root names, C=0 .. B=11 (standard pitch-class order).
+export const ROOT_KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const DEFAULT_ROOT_INDEX = 9; // 'A' — matches the original hardcoded A minor pentatonic exactly.
+
 const OCTAVE_COOLDOWN_MS = 600;
 const CHORD_ARP_HOLD_MS = 300; // left-hand 3-finger hold to flip chord<->arp
 
@@ -57,6 +76,12 @@ export class Mapper {
     this._chordArpHoldSince = null;
     this._pitchBand = null; // last computed band index, for HUD
 
+    // scale + key state — defaults reproduce the original hardcoded A minor
+    // pentatonic exactly. Persisted/set from main.js (localStorage), like
+    // bgMode/osdOn.
+    this._scaleId = 'minorPentatonic';
+    this._rootKeyIndex = DEFAULT_ROOT_INDEX;
+
     // held two-hand values (persist when only one hand present)
     this._heldCutoff = 8000;
     this._heldReverb = 0.35;
@@ -88,6 +113,39 @@ export class Mapper {
 
   setSampleName(name) {
     this.sampleName = name;
+  }
+
+  // ---- scale + key -------------------------------------------------------
+
+  setScale(id) {
+    if (SCALE_DEFS[id]) this._scaleId = id;
+  }
+
+  cycleScale() {
+    const i = SCALE_IDS.indexOf(this._scaleId);
+    this.setScale(SCALE_IDS[(i + 1) % SCALE_IDS.length]);
+  }
+
+  getScaleId() {
+    return this._scaleId;
+  }
+
+  setRootKey(index) {
+    this._rootKeyIndex = ((index % 12) + 12) % 12;
+  }
+
+  cycleRootKey() {
+    this.setRootKey(this._rootKeyIndex + 1);
+  }
+
+  getRootKeyIndex() {
+    return this._rootKeyIndex;
+  }
+
+  // Live note names for the active scale+key, one per band (low->high).
+  _noteNames() {
+    const def = SCALE_DEFS[this._scaleId];
+    return def.map((offset) => ROOT_KEYS[(this._rootKeyIndex + offset) % 12]);
   }
 
   _setParam(key, audioParamName, value) {
@@ -153,7 +211,8 @@ export class Mapper {
       const y = Math.max(0, Math.min(1, hands.right.y));
       const band = Math.min(5, Math.floor((1 - y) * 6)); // top(y=0)->band5 (highest)
       this._pitchBand = band;
-      const semitones = SCALE[band] + 12 * this._octaveShift;
+      const rootOffset = this._rootKeyIndex - DEFAULT_ROOT_INDEX; // transposes vs. the original A-rooted scale
+      const semitones = SCALE_DEFS[this._scaleId][band] + rootOffset + 12 * this._octaveShift;
       const pitch = Math.max(0.25, Math.min(4, Math.pow(2, semitones / 12)));
       this._setParam('pitch', 'pitch', pitch);
 
@@ -221,6 +280,10 @@ export class Mapper {
       },
       octaveShift: this._octaveShift,
       pitchBand: this._pitchBand,
+      scaleId: this._scaleId,
+      scaleLabel: SCALE_LABELS[this._scaleId],
+      rootKeyName: ROOT_KEYS[this._rootKeyIndex],
+      noteNames: this._noteNames(),
       chordOn: gestures.chordOn,
       chordArp: this._chordArp,
       beatOn: this.engine.beatOn,

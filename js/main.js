@@ -5,7 +5,7 @@ import { runSystemCheck } from './syscheck.js';
 import { GranularEngine, generateLibrary, captureMic } from './audio/engine.js';
 import { HandTracker } from './tracking/tracker.js';
 import { Renderer } from './visuals/renderer.js';
-import { Mapper } from './mapping.js';
+import { Mapper, SCALE_IDS, SCALE_LABELS, ROOT_KEYS } from './mapping.js';
 import { Recorder, downloadBlob } from './recorder.js';
 
 const CONSENT_KEY = 'ac.consent';
@@ -359,9 +359,12 @@ const btnRecord = document.getElementById('btn-record');
 const btnSamples = document.getElementById('btn-samples');
 const btnBg = document.getElementById('btn-bg');
 const btnBeat = document.getElementById('btn-beat');
+const btnScale = document.getElementById('btn-scale');
 
 const BG_KEY = 'ac.bg';
 const OSD_KEY = 'ac.osd';
+const SCALE_KEY = 'ac.scale';
+const ROOT_KEY = 'ac.root';
 
 const sampleMenu = document.getElementById('sample-menu');
 const sampleList = document.getElementById('sample-list');
@@ -455,6 +458,35 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
   mapper.start();
 
   window.addEventListener('resize', () => renderer.resize());
+
+  // ---- scale + key (persisted like bgMode/osdOn) -------------------------
+
+  function updateScaleButton() {
+    btnScale.textContent = `${ROOT_KEYS[mapper.getRootKeyIndex()]} ${SCALE_LABELS[mapper.getScaleId()]}`;
+  }
+
+  const savedScale = localStorage.getItem(SCALE_KEY);
+  if (savedScale && SCALE_IDS.includes(savedScale)) mapper.setScale(savedScale);
+  const savedRoot = parseInt(localStorage.getItem(ROOT_KEY), 10);
+  if (Number.isFinite(savedRoot)) mapper.setRootKey(savedRoot);
+  updateScaleButton();
+
+  function cycleScale() {
+    mapper.cycleScale();
+    localStorage.setItem(SCALE_KEY, mapper.getScaleId());
+    updateScaleButton();
+  }
+  function cycleRootKey() {
+    mapper.cycleRootKey();
+    localStorage.setItem(ROOT_KEY, String(mapper.getRootKeyIndex()));
+    updateScaleButton();
+  }
+  // click cycles scale (min pent -> blues -> maj pent -> nat minor);
+  // shift-click cycles root key — mirrors the BEAT button's click/shift-click split.
+  btnScale.addEventListener('click', (e) => {
+    if (e.shiftKey) cycleRootKey();
+    else cycleScale();
+  });
 
   // ---- VHS webcam background toggle --------------------------------------
 
@@ -678,6 +710,12 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     }
     if (e.key === '[' || e.key === ']') {
       nudgeBpm(e.key === ']' ? 5 : -5);
+    }
+    if (e.key === 's' || e.key === 'S') {
+      cycleScale();
+    }
+    if (e.key === 'k' || e.key === 'K') {
+      cycleRootKey();
     }
   });
 

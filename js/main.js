@@ -278,7 +278,7 @@ async function startWithMode(mode, audioContext) {
 // handler itself, then hand it down through startWithMode → __AC_BOOT.
 function startWithModeFromGesture(mode) {
   const AC = window.AudioContext || window.webkitAudioContext;
-  const audioContext = new AC();
+  const audioContext = new AC({ latencyHint: 'interactive' });
   audioContext.resume().catch(() => {});
   startWithMode(mode, audioContext);
 }
@@ -396,7 +396,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
   hudStatus.textContent = 'BOOTING AUDIO ENGINE...';
 
   const AC = window.AudioContext || window.webkitAudioContext;
-  const audioContext = providedAudioContext || new AC();
+  const audioContext = providedAudioContext || new AC({ latencyHint: 'interactive' });
   if (audioContext.state === 'suspended') {
     await audioContext.resume().catch(() => {});
   }

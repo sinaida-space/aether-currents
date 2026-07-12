@@ -905,8 +905,8 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     btnBeat.textContent = engine.beatOn ? `▪ BEAT ${bpm}` : `▸ BEAT ${bpm}`;
   }
 
-  function toggleBeat() {
-    engine.setBeat(!engine.beatOn);
+  async function toggleBeat() {
+    await engine.setBeat(!engine.beatOn);
     updateBeatButton();
   }
 

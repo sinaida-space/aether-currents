@@ -350,7 +350,24 @@ export class Recorder {
     canvas.height = ch;
     this._compositeCanvas = canvas;
     this._compositeCtx = canvas.getContext('2d');
+    // Force one real paint onto the composite canvas *before* anything probes
+    // or captures it. A freshly created, never-appended, never-painted
+    // offscreen canvas has a backing store but no committed frame yet — on
+    // some Chrome builds calling captureStream() on that canvas in the same
+    // tick intermittently yields a MediaStream with zero video tracks (the
+    // capture pipeline has nothing to composite from). When that happened,
+    // `combined` below silently ended up audio-only and MediaRecorder just
+    // recorded sound with no complaint — the root cause of "record dialog
+    // sometimes offers only audio". Painting a frame first guarantees a
+    // committed frame exists at capture time.
+    this._compositeCtx.fillStyle = '#000';
+    this._compositeCtx.fillRect(0, 0, cw, ch);
 
+    // Video support is intentionally re-probed here, fresh, on every
+    // start() call — never cached at module scope — and only after the
+    // composite canvas above is guaranteed to exist, be correctly sized for
+    // *this* recording (light/portrait can change between recordings), and
+    // hold a real painted frame.
     this._useMp4 = await probeMp4Support(cw, ch, this.ctx.sampleRate, this._recordFps);
 
     if (this._useMp4) {
@@ -392,7 +409,21 @@ export class Recorder {
   // --- MediaRecorder webm fallback path --------------------------------
   _startWebmRecorder(canvas) {
     // --- video stream: composite canvas + branded overlay, own rAF loop ---
-    const videoStream = canvas.captureStream(this._recordFps);
+    let videoStream = canvas.captureStream(this._recordFps);
+    if (videoStream.getVideoTracks().length === 0) {
+      // Intermittent Chrome quirk: captureStream() on a canvas that hasn't
+      // been composited yet can come back with no video track even though
+      // we just painted a frame into it (see the fillRect above _start()).
+      // One retry — by now a microtask/paint boundary has passed — recovers
+      // the video track in practice. Only if this also fails do we accept a
+      // genuinely audio-only recording, and we surface that via onError
+      // instead of silently proceeding.
+      videoStream = canvas.captureStream(this._recordFps);
+      if (videoStream.getVideoTracks().length === 0) {
+        console.error('[recorder] captureStream() produced no video track after retry — recording audio only');
+        this._onError?.('NO VIDEO TRACK — recording audio only');
+      }
+    }
 
     // --- audio: MediaStreamAudioDestinationNode fed from engine.output, no disconnect of speakers ---
     const dest = this.ctx.createMediaStreamDestination();

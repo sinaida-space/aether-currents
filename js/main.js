@@ -5,7 +5,7 @@ import { runSystemCheck } from './syscheck.js';
 import { GranularEngine, generateLibrary, captureMic } from './audio/engine.js';
 import { HandTracker } from './tracking/tracker.js';
 import { Renderer } from './visuals/renderer.js';
-import { Mapper } from './mapping.js';
+import { Mapper, SCALE_IDS, SCALE_LABELS, ROOT_KEYS } from './mapping.js';
 import { Recorder, downloadBlob } from './recorder.js';
 
 const CONSENT_KEY = 'ac.consent';
@@ -32,6 +32,8 @@ const camVideo = document.getElementById('cam');
 
 let lastProbe = null;
 let pendingMode = null;
+
+const DEBUG = new URLSearchParams(location.search).has('debug');
 
 function hasConsent() {
   return localStorage.getItem(CONSENT_KEY) === '1';
@@ -276,7 +278,7 @@ async function startWithMode(mode, audioContext) {
 // handler itself, then hand it down through startWithMode → __AC_BOOT.
 function startWithModeFromGesture(mode) {
   const AC = window.AudioContext || window.webkitAudioContext;
-  const audioContext = new AC();
+  const audioContext = new AC({ latencyHint: 'interactive' });
   audioContext.resume().catch(() => {});
   startWithMode(mode, audioContext);
 }
@@ -350,6 +352,121 @@ btnHome.addEventListener('click', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Task 8 — UI declutter panel: per-button show/hide + MINIMAL preset.
+// Pure visibility toggle (display:none via a class) — buttons stay in the
+// DOM, their click handlers and keyboard shortcuts keep working when hidden.
+// ---------------------------------------------------------------------------
+
+const DECLUTTER_KEY = 'ac.declutter';
+
+// id -> { label, essential }. essential = kept visible by the MINIMAL preset.
+const DECLUTTER_ITEMS = [
+  { id: 'btn-home', label: 'MAIN SCREEN', essential: true },
+  { id: 'btn-fullscreen', label: 'FULLSCREEN', essential: true },
+  { id: 'btn-record', label: 'RECORD', essential: true },
+  { id: 'btn-samples', label: 'SAMPLES', essential: false },
+  { id: 'btn-bg', label: 'BACKGROUND', essential: false },
+  { id: 'btn-beat', label: 'BEAT', essential: false },
+  { id: 'btn-scale', label: 'SCALE/KEY', essential: false },
+];
+
+function loadDeclutterState() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(DECLUTTER_KEY) || '{}');
+    const state = {};
+    for (const item of DECLUTTER_ITEMS) {
+      state[item.id] = raw[item.id] !== false; // default visible
+    }
+    return state;
+  } catch {
+    const state = {};
+    for (const item of DECLUTTER_ITEMS) state[item.id] = true;
+    return state;
+  }
+}
+
+let declutterState = loadDeclutterState();
+
+function saveDeclutterState() {
+  localStorage.setItem(DECLUTTER_KEY, JSON.stringify(declutterState));
+}
+
+function applyDeclutterState() {
+  for (const item of DECLUTTER_ITEMS) {
+    const el = document.getElementById(item.id);
+    if (!el) continue;
+    el.classList.toggle('ui-declutter-hidden', declutterState[item.id] === false);
+  }
+}
+
+const btnDeclutter = document.getElementById('btn-declutter');
+const declutterPanel = document.getElementById('declutter-panel');
+const declutterList = document.getElementById('declutter-list');
+const btnMinimal = document.getElementById('btn-minimal');
+const btnDeclutterReset = document.getElementById('btn-declutter-reset');
+const btnCloseDeclutter = document.getElementById('btn-close-declutter');
+
+function renderDeclutterList() {
+  declutterList.innerHTML = '';
+  for (const item of DECLUTTER_ITEMS) {
+    const li = document.createElement('li');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = declutterState[item.id] !== false;
+    checkbox.addEventListener('change', () => {
+      declutterState[item.id] = checkbox.checked;
+      saveDeclutterState();
+      applyDeclutterState();
+    });
+    const labelText = document.createElement('span');
+    labelText.textContent = item.label;
+    li.appendChild(checkbox);
+    li.appendChild(labelText);
+    li.addEventListener('click', (e) => {
+      if (e.target === checkbox) return;
+      checkbox.checked = !checkbox.checked;
+      checkbox.dispatchEvent(new Event('change'));
+    });
+    declutterList.appendChild(li);
+  }
+}
+
+function openDeclutterPanel() {
+  renderDeclutterList();
+  declutterPanel.style.display = 'block';
+}
+
+function closeDeclutterPanel() {
+  declutterPanel.style.display = 'none';
+}
+
+btnDeclutter.addEventListener('click', () => {
+  if (declutterPanel.style.display === 'none') openDeclutterPanel();
+  else closeDeclutterPanel();
+});
+btnCloseDeclutter.addEventListener('click', closeDeclutterPanel);
+
+btnMinimal.addEventListener('click', () => {
+  for (const item of DECLUTTER_ITEMS) declutterState[item.id] = item.essential;
+  saveDeclutterState();
+  applyDeclutterState();
+  renderDeclutterList();
+});
+
+btnDeclutterReset.addEventListener('click', () => {
+  for (const item of DECLUTTER_ITEMS) declutterState[item.id] = true;
+  saveDeclutterState();
+  applyDeclutterState();
+  renderDeclutterList();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && declutterPanel.style.display !== 'none') closeDeclutterPanel();
+});
+
+applyDeclutterState();
+
+// ---------------------------------------------------------------------------
 // Task 5 — boot hook, mapping loop, sample menu, recorder.
 // ---------------------------------------------------------------------------
 
@@ -359,9 +476,12 @@ const btnRecord = document.getElementById('btn-record');
 const btnSamples = document.getElementById('btn-samples');
 const btnBg = document.getElementById('btn-bg');
 const btnBeat = document.getElementById('btn-beat');
+const btnScale = document.getElementById('btn-scale');
 
 const BG_KEY = 'ac.bg';
 const OSD_KEY = 'ac.osd';
+const SCALE_KEY = 'ac.scale';
+const ROOT_KEY = 'ac.root';
 
 const sampleMenu = document.getElementById('sample-menu');
 const sampleList = document.getElementById('sample-list');
@@ -380,6 +500,57 @@ const btnSaveAudio = document.getElementById('btn-save-audio');
 const btnCopyCredit = document.getElementById('btn-copy-credit');
 const btnCloseExport = document.getElementById('btn-close-export');
 
+// ---------------------------------------------------------------------------
+// Task 4 — runtime perf watchdog: FULL mode under ~45fps sustained through
+// the first 15s after boot -> dismissible toast offering a LIGHT-mode switch.
+// FULL-mode-only, fires at most once per page-load session.
+// ---------------------------------------------------------------------------
+
+const perfToast = document.getElementById('perf-toast');
+const btnPerfSwitch = document.getElementById('btn-perf-switch');
+const btnPerfDismiss = document.getElementById('btn-perf-dismiss');
+
+const PERF_WATCHDOG_WINDOW_MS = 15000;
+const PERF_WATCHDOG_SAMPLE_MS = 1000;
+const PERF_WATCHDOG_FPS_THRESHOLD = 45;
+const PERF_WATCHDOG_LOW_FRACTION = 0.6; // majority of samples must be under threshold
+let perfWatchdogFired = false;
+
+function showPerfToast() {
+  if (perfWatchdogFired) return;
+  perfWatchdogFired = true;
+  perfToast.style.display = 'block';
+}
+
+btnPerfSwitch.addEventListener('click', () => {
+  storeMode('light');
+  location.reload();
+});
+btnPerfDismiss.addEventListener('click', () => {
+  perfToast.style.display = 'none';
+});
+
+// Samples renderer.fps (EMA over true frame interval, see renderer.js frame())
+// once per second for 15s. Triggers only on a sustained shortfall — both the
+// window average and a majority of individual samples must be under the
+// threshold — so a single slow-load stutter doesn't false-positive.
+function startPerfWatchdog(renderer) {
+  if (perfWatchdogFired) return;
+  const samples = [];
+  const startTime = performance.now();
+  const timer = setInterval(() => {
+    if (renderer.fps > 0) samples.push(renderer.fps);
+    if (performance.now() - startTime < PERF_WATCHDOG_WINDOW_MS) return;
+    clearInterval(timer);
+    if (perfWatchdogFired || samples.length === 0) return;
+    const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
+    const lowFraction = samples.filter((f) => f < PERF_WATCHDOG_FPS_THRESHOLD).length / samples.length;
+    if (avg < PERF_WATCHDOG_FPS_THRESHOLD && lowFraction >= PERF_WATCHDOG_LOW_FRACTION) {
+      showPerfToast();
+    }
+  }, PERF_WATCHDOG_SAMPLE_MS);
+}
+
 const CREDIT_LINE = 'Made with AETHER CURRENTS by Sinaida — sinaida.eu';
 const MIC_LABEL = '▸ RECORD MIC (4S)';
 
@@ -394,7 +565,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
   hudStatus.textContent = 'BOOTING AUDIO ENGINE...';
 
   const AC = window.AudioContext || window.webkitAudioContext;
-  const audioContext = providedAudioContext || new AC();
+  const audioContext = providedAudioContext || new AC({ latencyHint: 'interactive' });
   if (audioContext.state === 'suspended') {
     await audioContext.resume().catch(() => {});
   }
@@ -415,7 +586,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
 
     // Renderer construction is synchronous WebGL setup — runs immediately,
     // alongside the async engine/library/tracker work above.
-    renderer = new Renderer(glCanvas, hudCanvas, { mode, video: camVideo });
+    renderer = new Renderer(glCanvas, hudCanvas, { mode, video: camVideo, debug: DEBUG });
 
     [engine, library, tracker] = await Promise.all([enginePromise, libraryPromise, trackerPromise]);
   } catch (err) {
@@ -454,7 +625,38 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
   tracker.start();
   mapper.start();
 
+  if (mode === 'full') startPerfWatchdog(renderer);
+
   window.addEventListener('resize', () => renderer.resize());
+
+  // ---- scale + key (persisted like bgMode/osdOn) -------------------------
+
+  function updateScaleButton() {
+    btnScale.textContent = `${ROOT_KEYS[mapper.getRootKeyIndex()]} ${SCALE_LABELS[mapper.getScaleId()]}`;
+  }
+
+  const savedScale = localStorage.getItem(SCALE_KEY);
+  if (savedScale && SCALE_IDS.includes(savedScale)) mapper.setScale(savedScale);
+  const savedRoot = parseInt(localStorage.getItem(ROOT_KEY), 10);
+  if (Number.isFinite(savedRoot)) mapper.setRootKey(savedRoot);
+  updateScaleButton();
+
+  function cycleScale() {
+    mapper.cycleScale();
+    localStorage.setItem(SCALE_KEY, mapper.getScaleId());
+    updateScaleButton();
+  }
+  function cycleRootKey() {
+    mapper.cycleRootKey();
+    localStorage.setItem(ROOT_KEY, String(mapper.getRootKeyIndex()));
+    updateScaleButton();
+  }
+  // click cycles scale (min pent -> blues -> maj pent -> nat minor);
+  // shift-click cycles root key — mirrors the BEAT button's click/shift-click split.
+  btnScale.addEventListener('click', (e) => {
+    if (e.shiftKey) cycleRootKey();
+    else cycleScale();
+  });
 
   // ---- VHS webcam background toggle --------------------------------------
 
@@ -679,6 +881,18 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     if (e.key === '[' || e.key === ']') {
       nudgeBpm(e.key === ']' ? 5 : -5);
     }
+    // GPU-bulletproofing (issue #21): once WebGL context loss has repeated,
+    // the HUD offers this escape hatch — drop to LIGHT rendering at runtime.
+    if ((e.key === 'l' || e.key === 'L') && renderer.lossCount > 1 && !renderer.contextLost) {
+      renderer.setMode('light');
+      mapper.mode = 'light';
+    }
+    if (e.key === 's' || e.key === 'S') {
+      cycleScale();
+    }
+    if (e.key === 'k' || e.key === 'K') {
+      cycleRootKey();
+    }
   });
 
   // ---- BEAT toggle + BPM control ---------------------------------------------
@@ -731,37 +945,101 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
 
   // ---- recorder -----------------------------------------------------------
 
+  // Shared mutable object: Recorder writes into it (onError), Mapper reads
+  // it each tick and threads it into rendererState for the HUD to render.
+  // Errors must surface regardless of ?debug — never silent.
+  const recordState = { error: null, errorUntil: 0 };
+
   const recorder = new Recorder({
     glCanvas,
     hudCanvas,
     audioNode: engine.output,
     audioContext,
     modeLabel: mode === 'full' ? 'FULL MODE' : 'LIGHT MODE',
+    onError: (msg) => {
+      recordState.error = msg;
+      recordState.errorUntil = performance.now() + 6000;
+    },
+    // Live FPS EMA (js/visuals/renderer.js), sampled at record-start to
+    // decide 1080p60 vs 1080p30 in FULL mode — cheapest available perf
+    // signal since the renderer is already running under real load.
+    getFps: () => (renderer ? renderer.fps : null),
   });
+
+  mapper.recorder = recorder;
+  mapper.recordState = recordState;
 
   let lastExport = null;
 
-  // Centralized: fires whether stop() was triggered by the button or by the
-  // recorder's own 5-minute hard-stop timer, so the UI stays in sync either way.
+  // Centralized: fires whether stop() was triggered by the button, the
+  // recorder's own 5-minute hard-stop timer, or a mid-recording encoder
+  // failure (js/recorder.js _handleEncoderFailure), so the UI stays in sync
+  // and the button state machine can never wedge on "● STOP". result is
+  // null only in the worst case (stop() itself threw); still resets the UI.
   recorder.onStop = (result) => {
     btnRecord.textContent = '● RECORD';
+    btnRecord.disabled = false;
     mapper.recording = false;
-    lastExport = result;
-    recordExport.style.display = 'block';
+    if (result) {
+      lastExport = result;
+      // videoBlob can be null if only audio was salvageable — hide the
+      // video-export affordance rather than offering a download that fails.
+      btnSaveVideo.style.display = result.videoBlob ? '' : 'none';
+      recordExport.style.display = 'block';
+    }
   };
 
+  // btnRecord.disabled doubles as the "an async start/stop is in flight"
+  // debounce so a rapid double-click can't race two start()/stop() calls
+  // against each other and leave state inconsistent.
   btnRecord.addEventListener('click', async () => {
+    if (btnRecord.disabled) return;
     if (!recorder.recording) {
-      await recorder.start();
-      mapper.recording = true;
-      btnRecord.textContent = '● STOP';
+      btnRecord.disabled = true;
+      try {
+        await recorder.start();
+        mapper.recording = true;
+        btnRecord.textContent = '● STOP';
+      } catch (err) {
+        console.error('[AETHER CURRENTS] recorder start failed:', err);
+        recordState.error = 'RECORD START FAILED';
+        recordState.errorUntil = performance.now() + 6000;
+        btnRecord.textContent = '● RECORD';
+      } finally {
+        btnRecord.disabled = false;
+      }
     } else {
-      await recorder.stop();
+      btnRecord.textContent = '● STOP…';
+      btnRecord.disabled = true;
+      // Un-wedgeable guarantee: even if stop()'s cleanup somehow hangs
+      // (it's written to be defensive — see recorder.js — but this is the
+      // last line of defense), force the button back to idle so it never
+      // sticks on "● STOP" with no working path back.
+      const watchdog = setTimeout(() => {
+        console.error('[AETHER CURRENTS] recorder stop() did not settle in time — forcing UI reset');
+        recordState.error = 'STOP TIMED OUT';
+        recordState.errorUntil = performance.now() + 6000;
+        btnRecord.textContent = '● RECORD';
+        btnRecord.disabled = false;
+        mapper.recording = false;
+      }, 8000);
+      try {
+        await recorder.stop();
+      } catch (err) {
+        console.error('[AETHER CURRENTS] recorder stop failed:', err);
+        recordState.error = 'STOP FAILED — recording lost';
+        recordState.errorUntil = performance.now() + 6000;
+        btnRecord.textContent = '● RECORD';
+        mapper.recording = false;
+      } finally {
+        clearTimeout(watchdog);
+        btnRecord.disabled = false;
+      }
     }
   });
 
   btnSaveVideo.addEventListener('click', () => {
-    if (!lastExport) return;
+    if (!lastExport || !lastExport.webmBlob) return;
     downloadBlob(lastExport.webmBlob, lastExport.filename.webm);
   });
 

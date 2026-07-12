@@ -87,10 +87,3 @@ conduct-with-hands identity.
   expensive. Never silent Opus.
 - Recommended order: 1 → 3 → 2 → 4 → 5 → 6 → 7 → 8. Tasks 1+3 alone likely
   kill the bugs users are hitting.
-
-## YC note
-
-The tech story (browser instrument, zero install, on-device tracking) is
-strong, but YC funds **traction**: after v3.3, the move is 10 real
-DJs/dancers using it and sharing recordings. The DJ friend is user #1 of
-that loop.

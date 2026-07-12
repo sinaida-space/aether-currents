@@ -3,25 +3,34 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>AETHER CURRENTS — music at your fingertips</title>
-<meta name="description" content="No keyboard, no mouse, no MIDI controller — your hands are the instrument. AETHER CURRENTS reads gesture through the camera, on-device, and turns it straight into granular sound and live visuals in the browser. Conduct sound with your hands." />
+<title>AETHER CURRENTS — conduct sound with your hands</title>
+<meta name="description" content="Conduct sound with your hands. A browser-based instrument: on-device hand tracking drives granular audio synthesis and a real-time visual layer. No install, no server, no accounts." />
 <meta name="robots" content="index, follow" />
 <link rel="canonical" href="https://aether-currents.sinaida.eu/" />
 
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="assets/favicon.ico" sizes="any" />
+<link rel="icon" href="assets/favicon-32.png" sizes="32x32" type="image/png" />
+<link rel="icon" href="assets/favicon-16.png" sizes="16x16" type="image/png" />
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+<link rel="manifest" href="site.webmanifest" />
+<meta name="theme-color" content="#000000" />
+
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="AETHER CURRENTS" />
-<meta property="og:title" content="AETHER CURRENTS — music at your fingertips" />
-<meta property="og:description" content="No keyboard, no mouse, no MIDI controller — your hands are the instrument. Camera-driven gesture becomes granular sound and live visuals, entirely on-device, in your browser." />
 <meta property="og:url" content="https://aether-currents.sinaida.eu/" />
-<meta property="og:image" content="https://aether-currents.sinaida.eu/gh_ac_cover.png" />
-<meta property="og:image:width" content="3072" />
-<meta property="og:image:height" content="384" />
+<meta property="og:title" content="AETHER CURRENTS — conduct sound with your hands" />
+<meta property="og:description" content="A browser-based instrument: on-device hand tracking drives granular audio synthesis and a real-time visual layer. No install, no server, no accounts." />
+<meta property="og:image" content="https://aether-currents.sinaida.eu/assets/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="AETHER CURRENTS — black CRT-style screen with a red ECG trace and sparkle glyphs, tagline: conduct sound with your hands" />
 <meta property="og:locale" content="en_US" />
 
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="AETHER CURRENTS — music at your fingertips" />
-<meta name="twitter:description" content="Camera-driven gesture becomes granular sound and live visuals, entirely on-device. No install, no MIDI rig — just hands." />
-<meta name="twitter:image" content="https://aether-currents.sinaida.eu/gh_ac_cover.png" />
+<meta name="twitter:title" content="AETHER CURRENTS — conduct sound with your hands" />
+<meta name="twitter:description" content="A browser-based instrument: on-device hand tracking drives granular audio synthesis and a real-time visual layer." />
+<meta name="twitter:image" content="https://aether-currents.sinaida.eu/assets/og-image.png" />
 
 <link rel="stylesheet" href="css/main.css" />
 <script type="application/ld+json">
@@ -132,6 +141,27 @@
   <button id="btn-samples" class="btn">SAMPLES</button>
   <button id="btn-bg" class="btn">BG: VOID</button>
   <button id="btn-beat" class="btn">▸ BEAT</button>
+  <button id="btn-scale" class="btn">A MIN PENT</button>
+  <button id="btn-declutter" class="btn" title="show/hide controls">[≡]</button>
+</div>
+
+<div id="perf-toast" class="toast-panel" style="display:none">
+  <div id="perf-toast-text">FULL MODE is running under 45fps. Switch to LIGHT mode for smoother tracking?</div>
+  <div class="btn-row">
+    <button id="btn-perf-switch" class="btn">▸ SWITCH TO LIGHT</button>
+    <button id="btn-perf-dismiss" class="btn">DISMISS</button>
+  </div>
+</div>
+
+<div id="declutter-panel" class="dos-panel" style="display:none">
+  <div class="dos-panel-title">UI DECLUTTER</div>
+  <div class="btn-row">
+    <button id="btn-minimal" class="btn">▸ MINIMAL VIEW</button>
+    <button id="btn-declutter-reset" class="btn">▸ SHOW ALL</button>
+  </div>
+  <ul id="declutter-list" class="declutter-list"></ul>
+  <div class="dos-panel-note">hidden buttons stay reachable by their keyboard shortcuts. this panel only affects the visible row.</div>
+  <button id="btn-close-declutter" class="btn">[ ESC ] CLOSE</button>
 </div>
 
 <div id="sample-menu" class="dos-panel" style="display:none">

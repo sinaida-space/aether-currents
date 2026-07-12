@@ -55,6 +55,18 @@ export class Hud {
     this.lastDraw = -1e9; // force redraw after a resize
   }
 
+  // css-px height of the fixed bottom ui-bar (0 if hidden/absent), with a
+  // small margin so text never touches its top edge.
+  _measureUiBarHeight() {
+    if (this._uiBarEl === undefined) {
+      this._uiBarEl = document.getElementById('ui-bar');
+    }
+    const el = this._uiBarEl;
+    if (!el || !el.classList.contains('visible')) return 58;
+    const h = el.getBoundingClientRect().height;
+    return h > 0 ? Math.round(h + 14) : 58;
+  }
+
   // now = ms timestamp; fps = renderer.fps; osd = {osdOn, camOn, camMs} from renderer
   draw(state, fps, now, osd) {
     if (now - this.lastDraw < 100) return; // throttle to 10Hz
@@ -147,8 +159,10 @@ export class Hud {
       ctx.font = `${fontPx}px "VT323", "Courier New", monospace`;
     }
 
-    // reserve clearance so the fixed bottom ui-bar never overlaps our text
-    const uiClearance = Math.round(58 * dpr);
+    // reserve clearance so the fixed bottom ui-bar never overlaps our text.
+    // the bar wraps into a multi-row grid on narrow screens, so measure its
+    // actual rendered height instead of assuming a single-row bar.
+    const uiClearance = Math.round(this._measureUiBarHeight() * dpr);
     const bottomLine = H - uiClearance;
 
     // pitch bands + octave + beat pulse — only while a hand is tracked.

@@ -737,11 +737,14 @@ body.legal-page {
     width: 100%;
   }
 
-  /* ui-bar becomes a wrapping touch-target grid instead of a single row */
+  /* ui-bar becomes a wrapping touch-target grid instead of a single row.
+     the top-fade gradient only reads correctly for a single-row bar, so
+     switch to a solid backdrop here to fully occlude content underneath. */
   #ui-bar.visible {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 0.6rem;
+    background: rgba(0, 0, 0, 0.92);
   }
 
   #ui-bar .btn {

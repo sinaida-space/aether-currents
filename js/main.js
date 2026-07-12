@@ -5,6 +5,7 @@ import { runSystemCheck } from './syscheck.js';
 import { GranularEngine, generateLibrary, captureMic } from './audio/engine.js';
 import { HandTracker } from './tracking/tracker.js';
 import { Renderer } from './visuals/renderer.js';
+import { BeatTimeline } from './visuals/beat-timeline.js';
 import { Mapper, SCALE_IDS, SCALE_LABELS, ROOT_KEYS } from './mapping.js';
 import { Recorder, downloadBlob } from './recorder.js';
 
@@ -604,6 +605,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
   // built-in synths/voice sample.
   const activeIds = new Set();
   let activeOrder = []; // insertion order — activeOrder[0] drives the sampleName label
+  const mutedIds = new Set(); // per-sample mute (Task 4 bottom timeline lanes)
 
   function isBuiltinId(id) {
     return !id.startsWith('custom-');
@@ -729,6 +731,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
   function applyActiveSamples() {
     const buffers = [];
     for (const id of activeOrder) {
+      if (mutedIds.has(id)) continue; // muted lanes are excluded from the engine's active set
       const entry = entryById(id);
       if (entry) buffers.push(entry.buffer);
     }
@@ -749,6 +752,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     const evictId = activeOrder[idx];
     activeIds.delete(evictId);
     activeOrder.splice(idx, 1);
+    mutedIds.delete(evictId);
   }
 
   function toggleSample(id) {
@@ -756,11 +760,20 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
       if (activeIds.size <= 1) return; // keep at least one active sample
       activeIds.delete(id);
       activeOrder = activeOrder.filter((x) => x !== id);
+      mutedIds.delete(id);
     } else {
       if (activeIds.size >= 4) evictOldestForCap();
       activeIds.add(id);
       activeOrder.push(id);
     }
+    applyActiveSamples();
+  }
+
+  // Bottom timeline lane label click — mute/unmute a sample without removing
+  // it from the active layering set (so re-enabling doesn't lose its slot).
+  function toggleMute(id) {
+    if (mutedIds.has(id)) mutedIds.delete(id);
+    else mutedIds.add(id);
     applyActiveSamples();
   }
 
@@ -1067,4 +1080,29 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
   btnCloseExport.addEventListener('click', () => {
     recordExport.style.display = 'none';
   });
+
+  // ---- bottom beat timeline (Task 4) --------------------------------------
+  // Own lightweight rAF loop: draw() self-throttles to ~30Hz internally and
+  // is pure canvas work, so it rides along with the render loop's frame
+  // budget without adding DOM churn or tripping the perf watchdog.
+  const beatTimelineCanvas = document.getElementById('beat-timeline');
+  const beatTimeline = beatTimelineCanvas ? new BeatTimeline(beatTimelineCanvas, { onToggleMute: toggleMute }) : null;
+
+  if (beatTimeline) {
+    window.addEventListener('resize', () => beatTimeline.resize());
+
+    const tickBeatTimeline = (now) => {
+      const phase = engine.getBeatPhase();
+      const lanes = activeOrder.slice(0, 4).map((id) => {
+        const entry = entryById(id);
+        return { id, name: entry ? entry.name : id, muted: mutedIds.has(id) };
+      });
+      beatTimeline.draw(
+        { visible: true, bpm: phase.bpm, phase: phase.phase, beatIndex: phase.beatIndex, lanes },
+        now
+      );
+      requestAnimationFrame(tickBeatTimeline);
+    };
+    requestAnimationFrame(tickBeatTimeline);
+  }
 };

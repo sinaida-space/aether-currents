@@ -80,6 +80,10 @@ class BeatScheduler {
     this._lookahead = 0.35; // seconds scheduled ahead (stall-proof horizon)
     this._tick = 0.05; // scheduler wake interval (s)
     this._sec8th = 60 / this.bpm / 2;
+    // Optional (type, tSec) callback — Task 5's perfBus wiring taps this to
+    // emit 'kick'/'hat' events for the MIDI performance recorder, without
+    // this module knowing anything about MIDI.
+    this.onEvent = null;
   }
 
   start() {
@@ -144,6 +148,7 @@ class BeatScheduler {
   }
 
   _kick(t) {
+    if (this.onEvent) this.onEvent('kick', t);
     const ctx = this.ctx;
     const osc = ctx.createOscillator();
     osc.type = 'sine';
@@ -159,6 +164,7 @@ class BeatScheduler {
   }
 
   _hat(t) {
+    if (this.onEvent) this.onEvent('hat', t);
     const ctx = this.ctx;
     const src = ctx.createBufferSource();
     src.buffer = this.noise;
@@ -325,20 +331,57 @@ export class GranularEngine {
   }
 
   // --- Beat backbone (four-on-the-floor + sidechain) ---
-  setBeat(on) {
-    if (on) this._beat.start();
-    else this._beat.stop();
+  // Async: the AudioContext can be auto-suspended by the browser (mobile
+  // backgrounding, tab-visibility power-saving, or an autoplay policy that
+  // never got a fresh resume) well after boot's initial resume() in main.js.
+  // If setBeat(true) ran against a still-suspended context, the scheduler
+  // would happily queue kick/hat nodes against a frozen ctx.currentTime and
+  // nothing would ever audibly play — "beat sometimes silent after toggle".
+  // Guard every start with an explicit resume-and-wait.
+  async setBeat(on) {
+    if (on) {
+      if (this.ctx.state === 'suspended') {
+        await this.ctx.resume().catch(() => {});
+      }
+      this._beat.start();
+    } else {
+      this._beat.stop();
+    }
   }
   get beatOn() {
     return this._beat ? this._beat.running : false;
   }
 
+  // Subscribe to raw beat-scheduler events ('kick' | 'hat', tSec). Used by
+  // main.js to feed js/midi/perf-bus.js without engine.js depending on MIDI.
+  onBeatEvent(cb) {
+    this._beat.onEvent = typeof cb === 'function' ? cb : null;
+  }
+
   // UI-only BPM control (60-180). Recomputes the 8th-note grid going forward
   // without resetting phase/step, so a live change doesn't click or jump bar.
   setBpm(bpm) {
-    const clamped = Math.max(60, Math.min(180, Math.round(bpm)));
-    this._beat.bpm = clamped;
-    this._beat._sec8th = 60 / clamped / 2;
+    const rounded = Math.round(bpm);
+    // Guard against a NaN/non-finite value ever reaching the scheduler: once
+    // _sec8th is NaN, every future `_nextTime += _sec8th` stays NaN forever
+    // (NaN poisons all subsequent arithmetic), permanently silencing the
+    // beat even across later valid setBpm() calls since `_nextTime < horizon`
+    // is always false for NaN. Fall back to the current bpm instead.
+    const safe = Number.isFinite(rounded) ? rounded : this._beat.bpm;
+    const clamped = Math.max(60, Math.min(180, safe));
+    const beat = this._beat;
+    beat.bpm = clamped;
+    beat._sec8th = 60 / clamped / 2;
+    // Defensive re-align: if _nextTime was ever corrupted to NaN or has
+    // drifted absurdly far from "now" (e.g. after a long suspend), snap it
+    // back onto a valid near-future grid point instead of leaving the
+    // scheduler stalled forever waiting for an unreachable horizon.
+    if (beat.running) {
+      const now = this.ctx.currentTime;
+      if (!Number.isFinite(beat._nextTime) || beat._nextTime - now > 5 || beat._nextTime < now - 5) {
+        beat._nextTime = now + 0.06;
+      }
+    }
     return clamped;
   }
 

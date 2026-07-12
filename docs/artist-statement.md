@@ -1,0 +1,9 @@
+# Aether Currents — Artist Statement
+
+Aether Currents is a way to feel music on your fingertips. Open it, show it your camera, and your hands become the interface. The right hand moves through position and pitch. A pinch shapes grain size. The left hand's height sets density. Pull your hands apart and the filter opens, the space widens. Close into a fist and the sound freezes, held mid-air like a breath. There is no keyboard, no mouse, no MIDI controller between you and the sound. It is pure proprioception, translated.
+
+The work comes from Sinaida's years at the barre. Turnout, spotting, the discipline of "move only your upper body." A body trained inside constraints does not lose freedom; it finds a different one. Aether Currents offers six gestures and a granular synthesis engine underneath, and inside that small vocabulary the range is enormous. The instrument does not know what you will play. Neither does its maker, most nights.
+
+Sinaida built it with Kamil Yegelev, known as Telefm, a musician in Belgrade, over a shared conviction that AI-era tools do not have to flatten performance into a prompt. Somewhere between a biomedical engineer's instinct for signal and a dancer's instinct for gesture there is an instrument that responds in real time, on-device, with no server watching, no cloud in between. Sub-hundred-millisecond latency was never a vanity metric. It is the difference between playing an instrument and issuing a command to one. The visuals on screen are the same signal, seen: what your hands do to the audio, the light does back to you, and the loop closes somewhere between the camera and your own sense of where your hands are in space.
+
+What is it, finally? A granular synthesizer wearing a computer vision system. A dance studio carried in a browser tab. Either way, the stage did not disappear when Sinaida stopped dancing. It moved into the space between a hand and a webcam, and it is asking to be played.

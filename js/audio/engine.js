@@ -80,6 +80,10 @@ class BeatScheduler {
     this._lookahead = 0.35; // seconds scheduled ahead (stall-proof horizon)
     this._tick = 0.05; // scheduler wake interval (s)
     this._sec8th = 60 / this.bpm / 2;
+    // Optional (type, tSec) callback — Task 5's perfBus wiring taps this to
+    // emit 'kick'/'hat' events for the MIDI performance recorder, without
+    // this module knowing anything about MIDI.
+    this.onEvent = null;
   }
 
   start() {
@@ -144,6 +148,7 @@ class BeatScheduler {
   }
 
   _kick(t) {
+    if (this.onEvent) this.onEvent('kick', t);
     const ctx = this.ctx;
     const osc = ctx.createOscillator();
     osc.type = 'sine';
@@ -159,6 +164,7 @@ class BeatScheduler {
   }
 
   _hat(t) {
+    if (this.onEvent) this.onEvent('hat', t);
     const ctx = this.ctx;
     const src = ctx.createBufferSource();
     src.buffer = this.noise;
@@ -344,6 +350,12 @@ export class GranularEngine {
   }
   get beatOn() {
     return this._beat ? this._beat.running : false;
+  }
+
+  // Subscribe to raw beat-scheduler events ('kick' | 'hat', tSec). Used by
+  // main.js to feed js/midi/perf-bus.js without engine.js depending on MIDI.
+  onBeatEvent(cb) {
+    this._beat.onEvent = typeof cb === 'function' ? cb : null;
   }
 
   // UI-only BPM control (60-180). Recomputes the 8th-note grid going forward

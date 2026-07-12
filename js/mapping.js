@@ -3,6 +3,8 @@
 // are written via setTargetAtTime only when they cross an epsilon, so we
 // never spam the audio thread's message/param queues.
 
+import { perfBus } from './midi/perf-bus.js';
+
 const EPS = 1e-3;
 const TAU = 0.04; // was 0.05 — trimmed for latency (task 5); still glitch-safe
 const TAU_POSITION = 0.06; // was 0.08 — trimmed for latency; playhead motion stays audibly smooth
@@ -168,6 +170,10 @@ export class Mapper {
     const last = this._last[key];
     if (last !== null && Math.abs(value - last) < EPS) return;
     this._last[key] = value;
+    // Task 5 — publish every genuinely-changed gesture param onto perfBus;
+    // perf-recorder.js (when armed) throttles this to ~30Hz and maps it to
+    // a fixed CC number. No-op when nothing is subscribed.
+    perfBus.emit('cc', { param: key, value });
     const p = this.params.get(audioParamName);
     const tau =
       tauOverride !== undefined

@@ -5,8 +5,11 @@ import { runSystemCheck } from './syscheck.js';
 import { GranularEngine, generateLibrary, captureMic } from './audio/engine.js';
 import { HandTracker } from './tracking/tracker.js';
 import { Renderer } from './visuals/renderer.js';
+import { BeatTimeline } from './visuals/beat-timeline.js';
 import { Mapper, SCALE_IDS, SCALE_LABELS, ROOT_KEYS } from './mapping.js';
 import { Recorder, downloadBlob } from './recorder.js';
+import { perfBus } from './midi/perf-bus.js';
+import { PerfRecorder } from './midi/perf-recorder.js';
 
 const CONSENT_KEY = 'ac.consent';
 const MODE_KEY = 'ac.mode';
@@ -368,6 +371,7 @@ const DECLUTTER_ITEMS = [
   { id: 'btn-bg', label: 'BACKGROUND', essential: false },
   { id: 'btn-beat', label: 'BEAT', essential: false },
   { id: 'btn-scale', label: 'SCALE/KEY', essential: false },
+  { id: 'btn-midi', label: 'MIDI EXPORT', essential: false },
 ];
 
 function loadDeclutterState() {
@@ -477,6 +481,7 @@ const btnSamples = document.getElementById('btn-samples');
 const btnBg = document.getElementById('btn-bg');
 const btnBeat = document.getElementById('btn-beat');
 const btnScale = document.getElementById('btn-scale');
+const btnMidi = document.getElementById('btn-midi');
 
 const BG_KEY = 'ac.bg';
 const OSD_KEY = 'ac.osd';
@@ -604,6 +609,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
   // built-in synths/voice sample.
   const activeIds = new Set();
   let activeOrder = []; // insertion order — activeOrder[0] drives the sampleName label
+  const mutedIds = new Set(); // per-sample mute (Task 4 bottom timeline lanes)
 
   function isBuiltinId(id) {
     return !id.startsWith('custom-');
@@ -729,6 +735,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
   function applyActiveSamples() {
     const buffers = [];
     for (const id of activeOrder) {
+      if (mutedIds.has(id)) continue; // muted lanes are excluded from the engine's active set
       const entry = entryById(id);
       if (entry) buffers.push(entry.buffer);
     }
@@ -749,18 +756,33 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     const evictId = activeOrder[idx];
     activeIds.delete(evictId);
     activeOrder.splice(idx, 1);
+    mutedIds.delete(evictId);
   }
 
   function toggleSample(id) {
     if (activeIds.has(id)) {
       if (activeIds.size <= 1) return; // keep at least one active sample
+      const laneIndex = activeOrder.indexOf(id);
       activeIds.delete(id);
       activeOrder = activeOrder.filter((x) => x !== id);
+      mutedIds.delete(id);
+      perfBus.emit('sampleSwitch', { laneIndex, on: false });
     } else {
       if (activeIds.size >= 4) evictOldestForCap();
       activeIds.add(id);
       activeOrder.push(id);
+      perfBus.emit('sampleSwitch', { laneIndex: activeOrder.length - 1, on: true });
     }
+    applyActiveSamples();
+  }
+
+  // Bottom timeline lane label click — mute/unmute a sample without removing
+  // it from the active layering set (so re-enabling doesn't lose its slot).
+  function toggleMute(id) {
+    const laneIndex = activeOrder.indexOf(id);
+    if (mutedIds.has(id)) mutedIds.delete(id);
+    else mutedIds.add(id);
+    perfBus.emit('sampleMute', { laneIndex, muted: mutedIds.has(id) });
     applyActiveSamples();
   }
 
@@ -771,6 +793,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     if (activeIds.size >= 4) evictOldestForCap();
     activeIds.add(entry.id);
     activeOrder.push(entry.id);
+    perfBus.emit('sampleSwitch', { laneIndex: activeOrder.length - 1, on: true });
     applyActiveSamples();
   }
 
@@ -905,8 +928,8 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     btnBeat.textContent = engine.beatOn ? `▪ BEAT ${bpm}` : `▸ BEAT ${bpm}`;
   }
 
-  function toggleBeat() {
-    engine.setBeat(!engine.beatOn);
+  async function toggleBeat() {
+    await engine.setBeat(!engine.beatOn);
     updateBeatButton();
   }
 
@@ -1067,4 +1090,54 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
   btnCloseExport.addEventListener('click', () => {
     recordExport.style.display = 'none';
   });
+
+  // ---- MIDI performance export (Task 5) -----------------------------------
+  // Feed the beat scheduler's raw kick/hat events onto perfBus — engine.js
+  // stays MIDI-agnostic, this is the only place that bridges the two.
+  engine.onBeatEvent((type, tSec) => perfBus.emit(type, { tSec }));
+
+  const perfRecorder = new PerfRecorder({ getBpm: () => engine.getBeatPhase().bpm });
+
+  btnMidi.addEventListener('click', () => {
+    if (!perfRecorder.recording) {
+      perfRecorder.start();
+      btnMidi.textContent = '● MIDI';
+    } else {
+      const blob = perfRecorder.stop();
+      btnMidi.textContent = 'MIDI';
+      if (blob) {
+        const d = new Date();
+        const pad2 = (n) => String(n).padStart(2, '0');
+        const slug =
+          d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) +
+          '-' + pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds());
+        downloadBlob(blob, `aether-currents-${slug}.mid`);
+      }
+    }
+  });
+
+  // ---- bottom beat timeline (Task 4) --------------------------------------
+  // Own lightweight rAF loop: draw() self-throttles to ~30Hz internally and
+  // is pure canvas work, so it rides along with the render loop's frame
+  // budget without adding DOM churn or tripping the perf watchdog.
+  const beatTimelineCanvas = document.getElementById('beat-timeline');
+  const beatTimeline = beatTimelineCanvas ? new BeatTimeline(beatTimelineCanvas, { onToggleMute: toggleMute }) : null;
+
+  if (beatTimeline) {
+    window.addEventListener('resize', () => beatTimeline.resize());
+
+    const tickBeatTimeline = (now) => {
+      const phase = engine.getBeatPhase();
+      const lanes = activeOrder.slice(0, 4).map((id) => {
+        const entry = entryById(id);
+        return { id, name: entry ? entry.name : id, muted: mutedIds.has(id) };
+      });
+      beatTimeline.draw(
+        { visible: true, bpm: phase.bpm, phase: phase.phase, beatIndex: phase.beatIndex, lanes },
+        now
+      );
+      requestAnimationFrame(tickBeatTimeline);
+    };
+    requestAnimationFrame(tickBeatTimeline);
+  }
 };

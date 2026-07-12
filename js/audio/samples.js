@@ -317,6 +317,145 @@ async function genVoxel() {
   return ctx.startRendering();
 }
 
+// ---- 11. DISCO BASS — bouncy octave-jump filtered sawtooth bassline ----
+// 2 bars @ 120 BPM (8th note = 0.25s): low-root/high-octave alternation
+// through a resonant lowpass that snaps open on each hit, classic disco
+// "walking" bass feel. Amplitude and filter both return to rest at each
+// boundary so the 4s buffer loops cleanly.
+async function genDiscoBass() {
+  const dur = 4; // 2 bars @ 120 BPM
+  const ctx = offline(dur);
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.Q.value = 9;
+
+  const master = ctx.createGain();
+  master.gain.value = 0.7;
+  lp.connect(master).connect(ctx.destination);
+
+  const root = 55; // A1
+  const step = 0.25; // 8th note @ 120 BPM
+  // Pattern per bar (8 eighths): root, root, +12, root, +7, root, +12, root.
+  const pattern = [0, 0, 12, 0, 7, 0, 12, 0];
+  let t = 0;
+  let i = 0;
+  while (t < dur - 0.001) {
+    const semis = pattern[i % pattern.length];
+    const freq = root * Math.pow(2, semis / 12);
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(freq, t);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.9, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.08, t + step * 0.85);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + step * 0.98);
+    o.connect(g).connect(lp);
+    // Filter "snaps" open on each hit then closes back down — the bounce.
+    lp.frequency.setValueAtTime(300, t);
+    lp.frequency.exponentialRampToValueAtTime(semis > 0 ? 2200 : 1400, t + 0.02);
+    lp.frequency.exponentialRampToValueAtTime(350, t + step * 0.9);
+    o.start(t);
+    o.stop(t + step);
+    t += step;
+    i++;
+  }
+  return ctx.startRendering();
+}
+
+// ---- 12. FILTER STAB — french-house chord stab through a resonant sweep ----
+// Quarter-note stabs (0.5s @ 120 BPM) of a stacked triad, each swept through
+// a high-Q bandpass that sweeps up then settles — the classic "filter stab"
+// house chord hit. Silence between hits keeps loop boundaries clean.
+async function genFilterStab() {
+  const dur = 4; // 8 quarter notes @ 120 BPM
+  const ctx = offline(dur);
+  const master = ctx.createGain();
+  master.gain.value = 0.55;
+  master.connect(ctx.destination);
+
+  const beat = 0.5; // quarter note @ 120 BPM
+  const root = 220; // A3
+  const chord = [1, 1.2, 1.5, 2]; // root, minor third, fifth, octave
+  for (let t = 0; t < dur - 0.001; t += beat) {
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 7;
+    bp.frequency.setValueAtTime(500, t);
+    bp.frequency.exponentialRampToValueAtTime(4200, t + 0.09);
+    bp.frequency.exponentialRampToValueAtTime(1400, t + beat * 0.8);
+    bp.connect(master);
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.85, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + beat * 0.85);
+    g.connect(bp);
+
+    for (const ratio of chord) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = root * ratio;
+      o.connect(g);
+      o.start(t);
+      o.stop(t + beat * 0.9);
+    }
+  }
+  return ctx.startRendering();
+}
+
+// ---- 13. TAPE STRINGS — lush detuned saw-string pad, slow wow/flutter ----
+// A stack of slightly detuned sawtooths through a warm lowpass, each voice's
+// pitch wobbled by its own slow sine LFO (different rate/depth per voice) to
+// emulate analog tape wow/flutter. Fades in/out to silence at both ends of
+// the 4s buffer so it loops seamlessly.
+async function genTapeStrings() {
+  const dur = 4;
+  const ctx = offline(dur);
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.Q.value = 1.2;
+  lp.frequency.value = 2200;
+
+  const master = ctx.createGain();
+  master.gain.setValueAtTime(0.0001, 0);
+  master.gain.exponentialRampToValueAtTime(0.6, 0.6);
+  master.gain.setValueAtTime(0.6, dur - 0.6);
+  master.gain.exponentialRampToValueAtTime(0.0001, dur - 0.02);
+  lp.connect(master).connect(ctx.destination);
+
+  const root = 220; // A3
+  const voices = [
+    { ratio: 1, detune: -6, lfoHz: 0.35, lfoDepth: 4 },
+    { ratio: 1, detune: 5, lfoHz: 0.5, lfoDepth: 5 },
+    { ratio: 1.5, detune: -4, lfoHz: 0.28, lfoDepth: 3 },
+    { ratio: 2, detune: 7, lfoHz: 0.42, lfoDepth: 6 },
+  ];
+  for (const v of voices) {
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.value = root * v.ratio;
+    o.detune.value = v.detune;
+
+    // Slow wow/flutter: a sub-audio sine LFO modulating detune (cents).
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = v.lfoHz;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = v.lfoDepth;
+    lfo.connect(lfoGain).connect(o.detune);
+    lfo.start(0);
+    lfo.stop(dur);
+
+    const g = ctx.createGain();
+    g.gain.value = 0.22;
+    o.connect(g).connect(lp);
+    o.start(0);
+    o.stop(dur);
+  }
+  return ctx.startRendering();
+}
+
 const GENERATORS = [
   { id: 'drone', name: 'DEEP DRONE', gen: genDrone },
   { id: 'bell', name: 'FM BELL', gen: genBell },
@@ -328,6 +467,9 @@ const GENERATORS = [
   { id: 'pluck', name: 'WIRE PLUCK', gen: genPluck },
   { id: 'wind', name: 'SOLAR WIND', gen: genWind },
   { id: 'voxel', name: 'VOXEL GLITCH', gen: genVoxel },
+  { id: 'disco_bass', name: 'DISCO BASS', gen: genDiscoBass },
+  { id: 'filter_stab', name: 'FILTER STAB', gen: genFilterStab },
+  { id: 'tape_strings', name: 'TAPE STRINGS', gen: genTapeStrings },
 ];
 
 const VOICE_ASSET_URL = new URL('../../assets/audio/open-your-heart.m4a', import.meta.url);

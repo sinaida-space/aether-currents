@@ -79,6 +79,20 @@ a:focus {
   pointer-events: none;
 }
 
+/* Bottom-docked beat timeline strip — sits above (never overlapping) the
+   fixed ui-bar; JS keeps `bottom` synced to the ui-bar's live height. */
+#beat-timeline {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  z-index: 4;
+  display: none;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
 #cam {
   visibility: hidden;
   position: absolute;

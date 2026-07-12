@@ -328,8 +328,14 @@ export class Recorder {
     await document.fonts.load('16px VT323');
 
     const light = this.modeLabel === 'LIGHT MODE';
-    const cw = light ? 1280 : 1920;
-    const ch = light ? 720 : 1080;
+    // match the on-screen canvas's orientation: portrait devices (mobile,
+    // most phones held upright) get a portrait export instead of always
+    // being cropped into a fixed 16:9 landscape frame.
+    const srcW = this.glCanvas.width || this.glCanvas.clientWidth || 1;
+    const srcH = this.glCanvas.height || this.glCanvas.clientHeight || 1;
+    const portrait = srcH > srcW;
+    const cw = light ? (portrait ? 720 : 1280) : (portrait ? 1080 : 1920);
+    const ch = light ? (portrait ? 1280 : 720) : (portrait ? 1920 : 1080);
 
     this._recordFps = 60;
     if (!light) {

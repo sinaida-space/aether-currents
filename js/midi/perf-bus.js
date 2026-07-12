@@ -11,8 +11,8 @@
 //   perfBus.emit('cc', { param, value })         — continuous gesture param
 //   perfBus.emit('kick', { tSec })                — beat scheduler kick
 //   perfBus.emit('hat', { tSec })                 — beat scheduler hi-hat
-//   perfBus.emit('sampleSwitch', { id, on })       — sample layer toggled
-//   perfBus.emit('sampleMute', { id, muted })      — timeline lane mute toggle
+//   perfBus.emit('sampleSwitch', { laneIndex, on })    — sample layer toggled
+//   perfBus.emit('sampleMute', { laneIndex, muted })   — timeline lane mute toggle
 
 class PerfBus {
   constructor() {

@@ -10,6 +10,7 @@ import { Mapper, SCALE_IDS, SCALE_LABELS, ROOT_KEYS } from './mapping.js';
 import { Recorder, downloadBlob } from './recorder.js';
 import { perfBus } from './midi/perf-bus.js';
 import { PerfRecorder } from './midi/perf-recorder.js';
+import { requestTutorial, isTutorialRequested, startTutorial } from './tutorial.js';
 
 const CONSENT_KEY = 'ac.consent';
 const MODE_KEY = 'ac.mode';
@@ -23,6 +24,7 @@ const btnBootAccept = document.getElementById('btn-boot-accept');
 const asciiGlyphs = document.getElementById('ascii-glyphs');
 const btnStartFull = document.getElementById('btn-start-full');
 const btnStartLight = document.getElementById('btn-start-light');
+const btnTutorial = document.getElementById('btn-tutorial');
 const syscheckStatus = document.getElementById('syscheck-status');
 const syscheckDetails = document.getElementById('syscheck-details');
 const cameraError = document.getElementById('camera-error');
@@ -288,6 +290,18 @@ function startWithModeFromGesture(mode) {
 
 btnStartFull.addEventListener('click', () => startWithModeFromGesture('full'));
 btnStartLight.addEventListener('click', () => startWithModeFromGesture('light'));
+
+// "RUN TUTORIAL.EXE" — same synchronous-AudioContext start path as the mode
+// buttons (see startWithModeFromGesture comment above for why), just flagged
+// so __AC_BOOT launches the tutorial overlay once tracker/mapper exist.
+// No new gating: mirrors whichever mode button is currently enabled, full
+// by default (neither start button is ever actually .disabled today).
+btnTutorial.addEventListener('click', (e) => {
+  e.preventDefault();
+  requestTutorial();
+  const mode = !btnStartFull.disabled ? 'full' : 'light';
+  startWithModeFromGesture(mode);
+});
 
 btnRetryCamera.addEventListener('click', () => {
   if (pendingMode) {
@@ -630,6 +644,8 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
 
   tracker.start();
   mapper.start();
+
+  if (isTutorialRequested()) startTutorial({ tracker, perfBus });
 
   if (mode === 'full') startPerfWatchdog(renderer);
 

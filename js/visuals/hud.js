@@ -116,10 +116,16 @@ export class Hud {
     if (s.frozen && blinkOn) line('[FROZEN]', RED);
     else if (s.frozen) y += lh; // keep layout stable while blinking
 
-    // Suppress this fallback REC when the camcorder OSD is already showing
-    // its own top-right ● REC — avoids a doubled REC indicator on screen.
-    const osdRecActive = !!(osd && osd.osdOn && osd.camOn);
-    if (s.recording && !osdRecActive) line('● REC', RED);
+    // Suppress this fallback REC when the camcorder OSD is active — the OSD
+    // paints its own top-right REC/STBY (now tied to the real recording
+    // state, see below) — avoids a doubled REC indicator on screen.
+    const osdActive = !!(osd && osd.osdOn && osd.camOn);
+    const recSec = Math.floor((s.recordMs || 0) / 1000);
+    const recClock = `${Math.floor(recSec / 60)}:${String(recSec % 60).padStart(2, '0')}`;
+    if (s.recording && !osdActive) {
+      if (blinkOn) line(`● REC ${recClock}`, RED);
+      else y += lh; // keep layout stable while blinking
+    }
 
     // Persistent recorder error line — shown regardless of ?debug, errors
     // are never silent. Sticks for the caller-defined window (recordErrorUntil).
@@ -159,6 +165,28 @@ export class Hud {
       ctx.font = `${fontPx}px "VT323", "Courier New", monospace`;
     }
 
+    // pre-record countdown — big centered 3/2/1 so it's unambiguous when the
+    // recording actually starts. Runs before recorder.start(), so it never
+    // lands in the exported video.
+    if (s.countdown != null) {
+      const cf = Math.max(64, Math.round(110 * dpr));
+      const lf = Math.max(14, Math.round(16 * dpr));
+      ctx.textAlign = 'center';
+      ctx.fillStyle = RED;
+      ctx.shadowColor = RED;
+      ctx.shadowBlur = 18 * dpr;
+      ctx.font = `${cf}px "VT323", "Courier New", monospace`;
+      ctx.fillText(String(s.countdown), W / 2, H / 2 - cf / 2);
+      ctx.font = `${lf}px "VT323", "Courier New", monospace`;
+      ctx.fillStyle = WHITE;
+      ctx.shadowColor = WHITE;
+      ctx.shadowBlur = 6 * dpr;
+      ctx.fillText('RECORDING IN', W / 2, H / 2 - cf / 2 - lf * 2);
+      ctx.textAlign = 'left';
+      ctx.font = `${fontPx}px "VT323", "Courier New", monospace`;
+      ctx.shadowBlur = 8 * dpr;
+    }
+
     // reserve clearance so the fixed bottom ui-bar never overlaps our text.
     // the bar wraps into a multi-row grid on narrow screens, so measure its
     // actual rendered height instead of assuming a single-row bar.
@@ -177,14 +205,23 @@ export class Hud {
       ctx.font = `${fontPx}px "VT323", "Courier New", monospace`;
       ctx.shadowBlur = 8 * dpr;
 
-      // top-right: blinking REC + tape counter
+      // top-right: real camcorder semantics — blinking ● REC only while an
+      // actual recording runs (it used to blink whenever the cam was on,
+      // which made it impossible to tell when capture had started), STBY
+      // otherwise. Counter shows recording elapsed while recording, cam
+      // uptime on standby.
       ctx.textAlign = 'right';
       const rx = W - pad;
-      if (blinkOn) {
-        ctx.fillStyle = RED; ctx.shadowColor = RED;
-        ctx.fillText('● REC', rx, pad);
+      if (s.recording) {
+        if (blinkOn) {
+          ctx.fillStyle = RED; ctx.shadowColor = RED;
+          ctx.fillText('● REC', rx, pad);
+        }
+      } else {
+        ctx.fillStyle = DIM; ctx.shadowColor = WHITE;
+        ctx.fillText('STBY', rx, pad);
       }
-      const sec = Math.floor((osd.camMs || 0) / 1000);
+      const sec = s.recording ? recSec : Math.floor((osd.camMs || 0) / 1000);
       const mm = String(Math.floor(sec / 60) % 60).padStart(2, '0');
       const ss = String(sec % 60).padStart(2, '0');
       ctx.fillStyle = WHITE; ctx.shadowColor = WHITE;

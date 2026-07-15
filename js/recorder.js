@@ -199,7 +199,10 @@ async function probeMp4Support(width, height, sampleRate, framerate) {
   if (!window.VideoEncoder || !window.AudioEncoder) return false;
   try {
     const videoConfig = {
-      codec: 'avc1.640028',
+      // High profile level 4.2 — level 4.0 ('...28') tops out below 1080p60,
+      // and strict encoders (Safari) reject or fail mid-encode on it, which
+      // ended recordings with "video lost, WAV only". 4.2 covers 1080p60.
+      codec: 'avc1.64002a',
       width,
       height,
       bitrate: 8_000_000,
@@ -481,7 +484,7 @@ export class Recorder {
       },
     });
     videoEncoder.configure({
-      codec: 'avc1.640028',
+      codec: 'avc1.64002a', // High@4.2 — must match probeMp4Support()
       width: cw,
       height: ch,
       bitrate: 8_000_000,
@@ -684,8 +687,10 @@ export class Recorder {
         }
         if (this._videoChunks.length) {
           videoBlob = new Blob(this._videoChunks, { type: this._mimeType || 'video/webm' });
-          videoKind = 'webm';
-          ext = 'webm';
+          // Safari's MediaRecorder produces video/mp4 on this fallback path —
+          // name the file by what was actually recorded, not always .webm.
+          videoKind = (this._mimeType || '').includes('mp4') ? 'mp4' : 'webm';
+          ext = videoKind;
         }
       } catch (e) {
         console.error('[recorder] webm finalize failed — no video salvageable, WAV export still available', e);

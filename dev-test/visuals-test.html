@@ -140,7 +140,10 @@ function synthState(dt) {
     burstCount,
     modeLabel: mode === 'light' ? 'LIGHT MODE' : 'FULL MODE',
     sampleName: 'GHOST CHOIR',
-    recording: (t % 10) > 5,
+    // record-flow cycle: idle 0-2s, 3-2-1 countdown 2-5s, recording 5-10s
+    countdown: (t % 12) >= 2 && (t % 12) < 5 ? 3 - Math.floor((t % 12) - 2) : null,
+    recording: (t % 12) >= 5 && (t % 12) < 10,
+    recordMs: (t % 12) >= 5 && (t % 12) < 10 ? ((t % 12) - 5) * 1000 : 0,
     trackingFps: handsGone ? 0 : 28,
     stale: handsGone,
   };

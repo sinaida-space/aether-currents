@@ -514,6 +514,7 @@ const btnMicKeep = document.getElementById('btn-mic-keep');
 const btnMicRedo = document.getElementById('btn-mic-redo');
 
 const recordExport = document.getElementById('record-export');
+const exportVideoFailed = document.getElementById('export-video-failed');
 const btnSaveVideo = document.getElementById('btn-save-video');
 const btnSaveAudio = document.getElementById('btn-save-audio');
 const btnCopyCredit = document.getElementById('btn-copy-credit');
@@ -1022,31 +1023,65 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     if (result) {
       lastExport = result;
       // videoBlob can be null if only audio was salvageable — hide the
-      // video-export affordance rather than offering a download that fails.
+      // video-export affordance rather than offering a download that fails,
+      // and say so explicitly instead of leaving the user guessing.
       btnSaveVideo.style.display = result.videoBlob ? '' : 'none';
+      exportVideoFailed.style.display = result.videoBlob ? 'none' : '';
       recordExport.style.display = 'block';
     }
   };
+
+  // 3-2-1 on-screen countdown between hitting RECORD and the actual start,
+  // so it's unambiguous when capture begins. Drawn big-center by the HUD
+  // (mapper.countdown -> rendererState.countdown). Clicking again mid-count
+  // cancels. The countdown itself is NOT part of the recording.
+  let recordCountdownTimer = null;
+
+  function cancelRecordCountdown() {
+    if (recordCountdownTimer) { clearInterval(recordCountdownTimer); recordCountdownTimer = null; }
+    mapper.countdown = null;
+    btnRecord.textContent = '● RECORD';
+  }
+
+  async function startRecording() {
+    btnRecord.disabled = true;
+    try {
+      await recorder.start();
+      mapper.recording = true;
+      mapper.recordStartedAt = performance.now();
+      btnRecord.textContent = '● STOP';
+    } catch (err) {
+      console.error('[AETHER CURRENTS] recorder start failed:', err);
+      recordState.error = 'RECORD START FAILED';
+      recordState.errorUntil = performance.now() + 6000;
+      btnRecord.textContent = '● RECORD';
+    } finally {
+      btnRecord.disabled = false;
+    }
+  }
 
   // btnRecord.disabled doubles as the "an async start/stop is in flight"
   // debounce so a rapid double-click can't race two start()/stop() calls
   // against each other and leave state inconsistent.
   btnRecord.addEventListener('click', async () => {
     if (btnRecord.disabled) return;
+    if (recordCountdownTimer) { cancelRecordCountdown(); return; }
     if (!recorder.recording) {
-      btnRecord.disabled = true;
-      try {
-        await recorder.start();
-        mapper.recording = true;
-        btnRecord.textContent = '● STOP';
-      } catch (err) {
-        console.error('[AETHER CURRENTS] recorder start failed:', err);
-        recordState.error = 'RECORD START FAILED';
-        recordState.errorUntil = performance.now() + 6000;
-        btnRecord.textContent = '● RECORD';
-      } finally {
-        btnRecord.disabled = false;
-      }
+      let count = 3;
+      mapper.countdown = count;
+      btnRecord.textContent = `● ${count}…`;
+      recordCountdownTimer = setInterval(() => {
+        count--;
+        if (count > 0) {
+          mapper.countdown = count;
+          btnRecord.textContent = `● ${count}…`;
+          return;
+        }
+        clearInterval(recordCountdownTimer);
+        recordCountdownTimer = null;
+        mapper.countdown = null;
+        startRecording();
+      }, 1000);
     } else {
       btnRecord.textContent = '● STOP…';
       btnRecord.disabled = true;

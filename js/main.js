@@ -386,6 +386,7 @@ const DECLUTTER_ITEMS = [
   { id: 'btn-beat', label: 'BEAT', essential: false },
   { id: 'btn-scale', label: 'SCALE/KEY', essential: false },
   { id: 'btn-midi', label: 'MIDI EXPORT', essential: false },
+  { id: 'btn-medium', label: 'MEDIUM', essential: false },
 ];
 
 function loadDeclutterState() {
@@ -496,6 +497,7 @@ const btnBg = document.getElementById('btn-bg');
 const btnBeat = document.getElementById('btn-beat');
 const btnScale = document.getElementById('btn-scale');
 const btnMidi = document.getElementById('btn-midi');
+const btnMedium = document.getElementById('btn-medium');
 
 const BG_KEY = 'ac.bg';
 const OSD_KEY = 'ac.osd';
@@ -1164,6 +1166,24 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
           '-' + pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds());
         downloadBlob(blob, `aether-currents-${slug}.mid`);
       }
+    }
+  });
+
+  // ---- MEDIUM toggle (v3.6, #44) -------------------------------------------
+  // Lazily creates the voice-2 worklet node on first enable (engine.js), then
+  // just ramps its gain + flips the mapper's field-sim flag on every toggle.
+  let mediumBusy = false;
+  btnMedium.addEventListener('click', async () => {
+    if (mediumBusy) return;
+    mediumBusy = true;
+    try {
+      const next = !mapper.mediumOn;
+      if (next && !engine.mediumEnabled) await engine.enableMedium();
+      engine.setMediumActive(next);
+      mapper.setMediumOn(next);
+      btnMedium.textContent = next ? '▪ MEDIUM' : '▸ MEDIUM';
+    } finally {
+      mediumBusy = false;
     }
   });
 

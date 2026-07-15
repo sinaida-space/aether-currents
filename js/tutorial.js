@@ -76,7 +76,12 @@ const STEPS = [
     },
     detect(state, ctx) {
       const rh = state.hands.right;
-      if (!rh) return false;
+      if (!rh) {
+        // hand dropped out — clear lastPos so a re-entry teleport isn't
+        // counted as continuous movement and doesn't inflate pathLen.
+        ctx.lastPos = null;
+        return false;
+      }
       if (ctx.lastPos) {
         ctx.pathLen += Math.hypot(rh.x - ctx.lastPos.x, rh.y - ctx.lastPos.y);
       }
@@ -193,6 +198,7 @@ export function startTutorial({ tracker, perfBus }) {
   let successAt = null; // performance.now() timestamp when current step detected, or null
   let rafId = null;
   let active = true;
+  let completed = false; // true once the completion card is up — gates per-frame tracker work
   const ccCache = {}; // param -> last value seen via perfBus 'cc'
 
   const offCc = perfBus.on('cc', ({ param, value }) => {
@@ -260,8 +266,13 @@ export function startTutorial({ tracker, perfBus }) {
   }
 
   function updateLayout() {
-    panelEl.style.bottom = measureBottomClearance() + 'px';
-    completeEl.style.bottom = measureBottomClearance() + 'px';
+    // ui-bar height can change (declutter toggle, mobile wrap) without a
+    // window resize event firing — re-synced every tick() frame below, same
+    // approach as beat-timeline.js's draw(). Only touch style when it
+    // actually changed to avoid needless layout thrash.
+    const wantBottom = measureBottomClearance() + 'px';
+    if (panelEl.style.bottom !== wantBottom) panelEl.style.bottom = wantBottom;
+    if (completeEl.style.bottom !== wantBottom) completeEl.style.bottom = wantBottom;
   }
   updateLayout();
   window.addEventListener('resize', updateLayout);
@@ -299,6 +310,7 @@ export function startTutorial({ tracker, perfBus }) {
   function showComplete() {
     panelEl.style.display = 'none';
     completeEl.style.display = 'block';
+    completed = true;
   }
 
   function advance() {
@@ -311,20 +323,25 @@ export function startTutorial({ tracker, perfBus }) {
 
   function tick() {
     if (!active) return;
-    tutorialState = tracker.getState();
 
-    if (panelEl.style.display !== 'none' && stepIndex < STEPS.length) {
-      renderMeter();
+    updateLayout();
 
-      if (successAt == null) {
-        const step = STEPS[stepIndex];
-        stepCtx.now = performance.now();
-        if (step.detect(tutorialState, stepCtx)) {
-          successAt = performance.now();
-          detectedEl.classList.add('show');
+    if (!completed) {
+      tutorialState = tracker.getState();
+
+      if (panelEl.style.display !== 'none' && stepIndex < STEPS.length) {
+        renderMeter();
+
+        if (successAt == null) {
+          const step = STEPS[stepIndex];
+          stepCtx.now = performance.now();
+          if (step.detect(tutorialState, stepCtx)) {
+            successAt = performance.now();
+            detectedEl.classList.add('show');
+          }
+        } else if (performance.now() - successAt >= SUCCESS_HOLD_MS) {
+          advance();
         }
-      } else if (performance.now() - successAt >= SUCCESS_HOLD_MS) {
-        advance();
       }
     }
 

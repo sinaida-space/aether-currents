@@ -385,7 +385,7 @@ const DECLUTTER_ITEMS = [
   { id: 'btn-bg', label: 'BACKGROUND', essential: false },
   { id: 'btn-beat', label: 'BEAT', essential: false },
   { id: 'btn-scale', label: 'SCALE/KEY', essential: false },
-  { id: 'btn-midi', label: 'MIDI EXPORT', essential: false },
+  { id: 'btn-medium', label: 'MEDIUM', essential: false },
 ];
 
 function loadDeclutterState() {
@@ -495,7 +495,7 @@ const btnSamples = document.getElementById('btn-samples');
 const btnBg = document.getElementById('btn-bg');
 const btnBeat = document.getElementById('btn-beat');
 const btnScale = document.getElementById('btn-scale');
-const btnMidi = document.getElementById('btn-midi');
+const btnMedium = document.getElementById('btn-medium');
 
 const BG_KEY = 'ac.bg';
 const OSD_KEY = 'ac.osd';
@@ -517,6 +517,7 @@ const recordExport = document.getElementById('record-export');
 const exportVideoFailed = document.getElementById('export-video-failed');
 const btnSaveVideo = document.getElementById('btn-save-video');
 const btnSaveAudio = document.getElementById('btn-save-audio');
+const btnSaveMidi = document.getElementById('btn-save-midi');
 const btnCopyCredit = document.getElementById('btn-copy-credit');
 const btnCloseExport = document.getElementById('btn-close-export');
 
@@ -725,12 +726,18 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
       li.dataset.index = String(i);
       const isActive = activeIds.has(entry.id);
       if (isActive) li.classList.add('active');
+      const hint = document.createElement('span');
+      // Only 0-9 are wired to number keys (see keydown handler below); beyond
+      // that we still number every row for scan-ability, but drop the
+      // bracket styling since it isn't a keyboard shortcut.
       if (i < 10) {
-        const hint = document.createElement('span');
         hint.className = 'key-hint';
         hint.textContent = `[${i}]`;
-        li.appendChild(hint);
+      } else {
+        hint.className = 'key-hint key-hint-plain';
+        hint.textContent = `${i}.`;
       }
+      li.appendChild(hint);
       // textContent, not innerHTML: entry.name for uploads is the raw
       // user-controlled filename.
       const marker = isActive ? '▪ ' : '  ';
@@ -740,7 +747,11 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     });
 
     const micLi = document.createElement('li');
-    micLi.textContent = MIC_LABEL;
+    const micHint = document.createElement('span');
+    micHint.className = 'key-hint key-hint-plain';
+    micHint.textContent = `${library.length}.`;
+    micLi.appendChild(micHint);
+    micLi.appendChild(document.createTextNode(MIC_LABEL));
     micLi.addEventListener('click', () => recordMicSample());
     sampleList.appendChild(micLi);
   }
@@ -1009,6 +1020,12 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
   mapper.recorder = recorder;
   mapper.recordState = recordState;
 
+  // ---- MIDI performance capture — runs alongside video/audio recording ----
+  // Feed the beat scheduler's raw kick/hat events onto perfBus — engine.js
+  // stays MIDI-agnostic, this is the only place that bridges the two.
+  engine.onBeatEvent((type, tSec) => perfBus.emit(type, { tSec }));
+  const perfRecorder = new PerfRecorder({ getBpm: () => engine.getBeatPhase().bpm });
+
   let lastExport = null;
 
   // Centralized: fires whether stop() was triggered by the button, the
@@ -1020,13 +1037,22 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     btnRecord.textContent = '● RECORD';
     btnRecord.disabled = false;
     mapper.recording = false;
+    // The MIDI capture runs for the same span as the video/audio recording,
+    // so it's stopped here too — null if perfRecorder was never started
+    // (e.g. recorder.start() itself failed) or captured no events.
+    const midiBlob = perfRecorder.recording ? perfRecorder.stop() : null;
     if (result) {
       lastExport = result;
+      if (midiBlob) {
+        lastExport.midiBlob = midiBlob;
+        lastExport.filename.midi = result.filename.wav.replace(/\.wav$/, '.mid');
+      }
       // videoBlob can be null if only audio was salvageable — hide the
       // video-export affordance rather than offering a download that fails,
       // and say so explicitly instead of leaving the user guessing.
       btnSaveVideo.style.display = result.videoBlob ? '' : 'none';
       exportVideoFailed.style.display = result.videoBlob ? 'none' : '';
+      btnSaveMidi.style.display = midiBlob ? '' : 'none';
       recordExport.style.display = 'block';
     }
   };
@@ -1047,6 +1073,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     btnRecord.disabled = true;
     try {
       await recorder.start();
+      perfRecorder.start();
       mapper.recording = true;
       mapper.recordStartedAt = performance.now();
       btnRecord.textContent = '● STOP';
@@ -1122,6 +1149,11 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     downloadBlob(lastExport.wavBlob, lastExport.filename.wav);
   });
 
+  btnSaveMidi.addEventListener('click', () => {
+    if (!lastExport || !lastExport.midiBlob) return;
+    downloadBlob(lastExport.midiBlob, lastExport.filename.midi);
+  });
+
   btnCopyCredit.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(CREDIT_LINE);
@@ -1142,28 +1174,21 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     recordExport.style.display = 'none';
   });
 
-  // ---- MIDI performance export (Task 5) -----------------------------------
-  // Feed the beat scheduler's raw kick/hat events onto perfBus — engine.js
-  // stays MIDI-agnostic, this is the only place that bridges the two.
-  engine.onBeatEvent((type, tSec) => perfBus.emit(type, { tSec }));
-
-  const perfRecorder = new PerfRecorder({ getBpm: () => engine.getBeatPhase().bpm });
-
-  btnMidi.addEventListener('click', () => {
-    if (!perfRecorder.recording) {
-      perfRecorder.start();
-      btnMidi.textContent = '● MIDI';
-    } else {
-      const blob = perfRecorder.stop();
-      btnMidi.textContent = 'MIDI';
-      if (blob) {
-        const d = new Date();
-        const pad2 = (n) => String(n).padStart(2, '0');
-        const slug =
-          d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) +
-          '-' + pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds());
-        downloadBlob(blob, `aether-currents-${slug}.mid`);
-      }
+  // ---- MEDIUM toggle (v3.6, #44) -------------------------------------------
+  // Lazily creates the voice-2 worklet node on first enable (engine.js), then
+  // just ramps its gain + flips the mapper's field-sim flag on every toggle.
+  let mediumBusy = false;
+  btnMedium.addEventListener('click', async () => {
+    if (mediumBusy) return;
+    mediumBusy = true;
+    try {
+      const next = !mapper.mediumOn;
+      if (next && !engine.mediumEnabled) await engine.enableMedium();
+      engine.setMediumActive(next);
+      mapper.setMediumOn(next);
+      btnMedium.textContent = next ? '▪ MEDIUM' : '▸ MEDIUM';
+    } finally {
+      mediumBusy = false;
     }
   });
 

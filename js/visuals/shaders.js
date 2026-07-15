@@ -116,6 +116,8 @@ uniform int   uTexSize;
 uniform float uAspect;      // width/height
 uniform float uPointScale;
 uniform vec2  uHandPresent;
+uniform sampler2D uField;   // MEDIUM (v3.6, #44): 32x24 single-channel dye wake
+uniform float uFieldOn;     // 0/1 hard gate — contribution must be exactly 0 when MEDIUM is off
 out float vEnergy;
 float hash11(float p){ p = fract(p * 0.1031); p *= p + 33.33; p *= p + p; return fract(p); }
 void main(){
@@ -130,12 +132,18 @@ void main(){
   // unanchored ones are dim fog — brightness must not depend on velocity alone
   int lm = clamp(int(hash11(float(idx) + 0.5) * 42.0), 0, 41);
   float present = lm < 21 ? uHandPresent.x : uHandPresent.y;
-  vEnergy = mix(0.006 + e * 0.012, 0.026 + e * 0.05, present);
+
+  // field.js indexes its grid in raw (unflipped) hand-y space, while pos.y
+  // here is already flipped into sim/screen-up space (see renderer._readState),
+  // so the sample coord flips y back to match.
+  float fieldDye = texture(uField, vec2(pos.x, 1.0 - pos.y)).r * uFieldOn;
+
+  vEnergy = mix(0.006 + e * 0.012, 0.026 + e * 0.05, present) + fieldDye * 0.05;
 
   vec2 ndc = pos * 2.0 - 1.0;
   ndc.x /= uAspect;                       // keep the constellation round
   gl_Position = vec4(ndc, 0.0, 1.0);
-  gl_PointSize = uPointScale * (0.6 + e * 1.4 + present * 0.5);
+  gl_PointSize = uPointScale * (0.6 + e * 1.4 + present * 0.5 + fieldDye * 0.8);
 }`;
 
 export const PARTICLE_FS = `#version 300 es

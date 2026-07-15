@@ -173,7 +173,8 @@ export class Renderer {
       sim: this._locs(this.pSim, ['uState', 'uTexSize', 'uTime', 'uDt', 'uHandPresent',
         'uAttract', 'uRadius', 'uDamping', 'uDrift', 'uLandmarks', 'uHandVelL', 'uHandVelR',
         'uMomentum', 'uBurst']),
-      particle: this._locs(this.pParticle, ['uState', 'uTexSize', 'uAspect', 'uPointScale', 'uHandPresent']),
+      particle: this._locs(this.pParticle, ['uState', 'uTexSize', 'uAspect', 'uPointScale', 'uHandPresent',
+        'uField', 'uFieldOn']),
       feedback: this._locs(this.pFeedback, ['uScene', 'uPrev', 'uDecay', 'uRot', 'uZoom', 'uInput']),
       threshold: this._locs(this.pThreshold, ['uTex', 'uThresh']),
       blur: this._locs(this.pBlur, ['uTex', 'uDir']),
@@ -225,6 +226,23 @@ export class Renderer {
 
     // glyph atlas for asciiDisplace (built once from an offscreen 2D canvas)
     this._buildGlyphAtlas();
+
+    // MEDIUM field texture (v3.6, #44): 32x24 single-channel dye wake, sampled
+    // by the particle pass. R8 is core WebGL2, no extension needed. Reseeded
+    // to zero here (and again on context restore) so it never shows garbage
+    // before the first upload.
+    this.fieldW = 32; this.fieldH = 24;
+    this._fieldUploadBuf = new Uint8Array(this.fieldW * this.fieldH); // preallocated, zero per-frame alloc
+    this.fieldTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.fieldTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, this.fieldW, this.fieldH, 0,
+      gl.RED, gl.UNSIGNED_BYTE, this._fieldUploadBuf);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this._fieldOn = 0;
+    this._fieldUploadCounter = 0;
 
     // simulation state (fixed size, never reallocated on resize)
     this.simSize = this.cfg.simSize;
@@ -575,6 +593,28 @@ export class Renderer {
       this._camResY = this.video.videoHeight || 1;
     }
 
+    // MEDIUM field texture upload (v3.6, #44): hard-gated on field.on so
+    // particle contribution is exactly zero whenever MEDIUM is off, even
+    // during the field's own post-off decay tail (Task A's field keeps
+    // stepping briefly after mediumOn flips false).
+    const field = state && state.field;
+    this._fieldOn = field && field.on ? 1 : 0;
+    if (field && field.on && field.energy > 1e-7) {
+      this._fieldUploadCounter = (this._fieldUploadCounter + 1) | 0;
+      const uploadNow = this.mode === 'light' ? (this._fieldUploadCounter % 2 === 0) : true;
+      if (uploadNow) {
+        const dye = field.dye;
+        const buf = this._fieldUploadBuf;
+        for (let i = 0; i < buf.length; i++) {
+          const v = dye[i] * 170; // dye range ~0..1.5 -> 0..255
+          buf[i] = v < 0 ? 0 : (v > 255 ? 255 : v) | 0;
+        }
+        gl.bindTexture(gl.TEXTURE_2D, this.fieldTex);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.fieldW, this.fieldH,
+          gl.RED, gl.UNSIGNED_BYTE, buf);
+      }
+    }
+
     // glitch scheduler (only while the cam background is on)
     const camActive = this._camOnTarget > 0.5;
     this._updateGlitch(dt, camActive);
@@ -628,6 +668,8 @@ export class Renderer {
     gl.useProgram(this.pParticle);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.stateTex[this.stateIndex]);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.fieldTex);
     const up = this.u.particle;
     gl.uniform1i(up.uState, 0);
     gl.uniform1i(up.uTexSize, this.simSize);
@@ -635,6 +677,8 @@ export class Renderer {
     const pscale = (2.0 + this._grainSize * 7.0) * (this.rh / 900);
     gl.uniform1f(up.uPointScale, pscale);
     gl.uniform2fv(up.uHandPresent, this._handPresent);
+    gl.uniform1i(up.uField, 1);
+    gl.uniform1f(up.uFieldOn, this._fieldOn);
     gl.drawArrays(gl.POINTS, 0, this.particleCount);
     gl.disable(gl.BLEND);
 

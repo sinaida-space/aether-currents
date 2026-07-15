@@ -477,6 +477,13 @@ body.legal-page {
   margin-right: 0.6rem;
 }
 
+/* Rows past index 9 (and MIC CAPTURE) are numbered for scan-ability but
+   aren't reachable by a number key — dim tone instead of cyan bracket
+   keeps that distinction visible without hiding the number entirely. */
+#sample-list li .key-hint.key-hint-plain {
+  color: var(--dim);
+}
+
 #sample-list li:hover .key-hint,
 #sample-list li.active .key-hint {
   color: var(--black);

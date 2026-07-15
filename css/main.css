@@ -210,6 +210,10 @@ h2 {
   padding-right: 1rem;
 }
 
+.tutorial-link {
+  margin-top: 0.5rem;
+}
+
 .legal-links {
   font-size: 0.78rem;
   margin: 0.75rem 0;
@@ -596,6 +600,161 @@ body.legal-page {
 
 #mic-review .btn-row {
   justify-content: center;
+}
+
+/* ---------- tutorial overlay (v3.5) ----------
+   Own DOM layer (not the HUD canvas) so it can host click targets — see
+   js/tutorial.js. The wrapper is pointer-events:none/full-viewport so the
+   live camera feed and instrument stay interactive underneath; only the
+   panel itself (and its controls) accept clicks. Cyan border distinguishes
+   it as a guidance overlay from the red-bordered dos-panels. */
+.tutorial-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 22;
+  pointer-events: none;
+}
+
+.tutorial-panel {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  width: min(560px, 94vw);
+  border: 1px solid var(--cyan);
+  background: var(--panel-bg);
+  box-shadow: 0 0 24px rgba(0, 229, 255, 0.25);
+  padding: 1rem 1.25rem;
+  pointer-events: auto;
+}
+
+.tutorial-step-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--dim);
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  color: var(--cyan);
+  text-transform: uppercase;
+}
+
+.tutorial-controls {
+  display: flex;
+  gap: 1rem;
+}
+
+.tutorial-controls a {
+  color: var(--dim);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.tutorial-controls a:hover {
+  color: var(--red);
+}
+
+.tutorial-body {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.tutorial-glyph {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  color: var(--white);
+}
+
+.tutorial-glyph svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.tutorial-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tutorial-title {
+  color: var(--red);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  font-size: 1.1rem;
+  text-shadow: var(--glow-red);
+}
+
+.tutorial-caption,
+.tutorial-listen {
+  color: var(--white);
+  font-size: 0.85rem;
+  margin-top: 0.15rem;
+}
+
+.tutorial-listen {
+  color: var(--dim);
+}
+
+.tutorial-meter {
+  margin-top: 0.5rem;
+  color: var(--cyan);
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+}
+
+.tutorial-detected {
+  margin-top: 0.35rem;
+  color: var(--red);
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
+  text-shadow: var(--glow-red);
+  visibility: hidden;
+}
+
+.tutorial-detected.show {
+  visibility: visible;
+}
+
+.tutorial-complete {
+  text-align: center;
+}
+
+.tutorial-complete-title {
+  color: var(--red);
+  text-shadow: var(--glow-red);
+  font-size: 1.1rem;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.tutorial-complete-hint {
+  color: var(--dim);
+  font-size: 0.8rem;
+  margin-bottom: 0.9rem;
+}
+
+@media (max-width: 820px) {
+  .tutorial-panel {
+    width: 96vw;
+    padding: 0.75rem 0.9rem;
+  }
+
+  .tutorial-body {
+    gap: 0.6rem;
+  }
+
+  .tutorial-glyph {
+    width: 36px;
+    height: 36px;
+  }
+
+  .tutorial-title {
+    font-size: 0.95rem;
+  }
 }
 
 /* ---------- boot / POST screen ---------- */

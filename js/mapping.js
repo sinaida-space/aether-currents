@@ -108,6 +108,8 @@ export class Mapper {
     this._handsPresent = true;
 
     this.recording = false;
+    this.recordStartedAt = 0; // performance.now() at recorder start, for HUD elapsed time
+    this.countdown = null; // 3..1 while the pre-record countdown runs, else null
     this._lastT = performance.now();
 
     this._rafHandle = null;
@@ -374,6 +376,8 @@ export class Mapper {
       modeLabel: this.mode === 'full' ? 'FULL MODE' : 'LIGHT MODE',
       sampleName: this.sampleName,
       recording: this.recording,
+      recordMs: this.recording && this.recordStartedAt ? performance.now() - this.recordStartedAt : 0,
+      countdown: this.countdown,
       trackingFps: this.tracker.trackingFps,
       stale: state.stale,
       latencyMs,

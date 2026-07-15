@@ -496,6 +496,8 @@ const btnBg = document.getElementById('btn-bg');
 const btnBeat = document.getElementById('btn-beat');
 const btnScale = document.getElementById('btn-scale');
 const btnMedium = document.getElementById('btn-medium');
+const mediumIntro = document.getElementById('medium-intro');
+const btnMediumOk = document.getElementById('btn-medium-ok');
 
 const BG_KEY = 'ac.bg';
 const OSD_KEY = 'ac.osd';
@@ -727,16 +729,8 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
       const isActive = activeIds.has(entry.id);
       if (isActive) li.classList.add('active');
       const hint = document.createElement('span');
-      // Only 0-9 are wired to number keys (see keydown handler below); beyond
-      // that we still number every row for scan-ability, but drop the
-      // bracket styling since it isn't a keyboard shortcut.
-      if (i < 10) {
-        hint.className = 'key-hint';
-        hint.textContent = `[${i}]`;
-      } else {
-        hint.className = 'key-hint key-hint-plain';
-        hint.textContent = `${i}.`;
-      }
+      hint.className = 'key-hint';
+      hint.textContent = `[${String(i).padStart(2, '0')}]`;
       li.appendChild(hint);
       // textContent, not innerHTML: entry.name for uploads is the raw
       // user-controlled filename.
@@ -748,8 +742,8 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
 
     const micLi = document.createElement('li');
     const micHint = document.createElement('span');
-    micHint.className = 'key-hint key-hint-plain';
-    micHint.textContent = `${library.length}.`;
+    micHint.className = 'key-hint';
+    micHint.textContent = `[${String(library.length).padStart(2, '0')}]`;
     micLi.appendChild(micHint);
     micLi.appendChild(document.createTextNode(MIC_LABEL));
     micLi.addEventListener('click', () => recordMicSample());
@@ -913,6 +907,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     if (e.key === 'Escape') {
       if (sampleMenu.style.display !== 'none') closeSampleMenu();
       if (recordExport.style.display !== 'none') recordExport.style.display = 'none';
+      if (mediumIntro.style.display !== 'none') mediumIntro.style.display = 'none';
       return;
     }
     if (/^[0-9]$/.test(e.key)) {
@@ -1178,18 +1173,35 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
   // Lazily creates the voice-2 worklet node on first enable (engine.js), then
   // just ramps its gain + flips the mapper's field-sim flag on every toggle.
   let mediumBusy = false;
-  btnMedium.addEventListener('click', async () => {
+  async function activateMedium() {
     if (mediumBusy) return;
     mediumBusy = true;
     try {
-      const next = !mapper.mediumOn;
-      if (next && !engine.mediumEnabled) await engine.enableMedium();
-      engine.setMediumActive(next);
-      mapper.setMediumOn(next);
-      btnMedium.textContent = next ? '▪ MEDIUM' : '▸ MEDIUM';
+      if (!engine.mediumEnabled) await engine.enableMedium();
+      engine.setMediumActive(true);
+      mapper.setMediumOn(true);
+      btnMedium.textContent = '▪ MEDIUM';
     } finally {
       mediumBusy = false;
     }
+  }
+  function deactivateMedium() {
+    engine.setMediumActive(false);
+    mapper.setMediumOn(false);
+    btnMedium.textContent = '▸ MEDIUM';
+  }
+  btnMedium.addEventListener('click', () => {
+    if (mediumBusy) return;
+    if (mapper.mediumOn) { deactivateMedium(); return; }
+    // Entering an experimental tool — explain what it does and how to use it
+    // before switching it on, every time (not just first-run): MEDIUM's
+    // behavior is unpredictable by design and easy to trigger by accident
+    // via the same gesture vocabulary as the rest of the instrument.
+    mediumIntro.style.display = 'block';
+  });
+  btnMediumOk.addEventListener('click', () => {
+    mediumIntro.style.display = 'none';
+    activateMedium();
   });
 
   // ---- bottom beat timeline (Task 4) --------------------------------------

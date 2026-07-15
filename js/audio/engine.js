@@ -264,6 +264,12 @@ export class GranularEngine {
     // Internal beat scheduler (kick + hat + sidechain). Off until setBeat(true).
     eng._beat = new BeatScheduler(audioContext, output, duck, noise);
 
+    // MEDIUM mode (v3.6, issue #44) — second granular voice, created lazily
+    // on first enableMedium() call. Never instantiated at boot: `eng._medium`
+    // stays null until then, so a boot with MEDIUM never touched creates no
+    // extra AudioWorkletNode (DoD requirement).
+    eng._medium = null;
+
     return eng;
   }
 
@@ -284,9 +290,17 @@ export class GranularEngine {
   }
 
   // --- Sample loading: downmix to mono Float32Array and transfer to the worklet ---
+  // MEDIUM (v3.6): when voice 2 exists, every buffer/config port message is
+  // mirrored to it too, so both grain pools always draw from the same active
+  // sample set — voice 2 is a second AudioWorkletNode instance of the SAME
+  // processor, not a fork, and its worklet-side state must track voice 1's.
   setSample(audioBuffer) {
     const mono = this._downmix(audioBuffer);
     this.node.port.postMessage({ type: 'setSample', buffer: mono }, [mono.buffer]);
+    if (this._medium) {
+      const mono2 = this._downmix(audioBuffer);
+      this._medium.node.port.postMessage({ type: 'setSample', buffer: mono2 }, [mono2.buffer]);
+    }
   }
 
   // Set the active granular set (1..4 AudioBuffers). Each is downmixed to mono
@@ -302,32 +316,92 @@ export class GranularEngine {
       transfer.push(mono.buffer);
     }
     this.node.port.postMessage({ type: 'setSamples', buffers }, transfer);
+    if (this._medium) {
+      const buffers2 = [];
+      const transfer2 = [];
+      for (let i = 0; i < list.length && buffers2.length < 4; i++) {
+        if (!list[i]) continue;
+        const mono = this._downmix(list[i]);
+        buffers2.push(mono);
+        transfer2.push(mono.buffer);
+      }
+      this._medium.node.port.postMessage({ type: 'setSamples', buffers: buffers2 }, transfer2);
+    }
   }
 
   freeze(on) {
     this.node.port.postMessage({ type: 'freeze', value: !!on });
+    if (this._medium) this._medium.node.port.postMessage({ type: 'freeze', value: !!on });
   }
 
   // Chord mode: 'arp' (legacy alternating dyad) vs simultaneous (default).
   // Latent — no UI/gesture wired yet (v3.2).
   setChordMode(arp) {
     this.node.port.postMessage({ type: 'chordMode', arp: !!arp });
+    if (this._medium) this._medium.node.port.postMessage({ type: 'chordMode', arp: !!arp });
   }
 
   // Fire a grain burst. When the beat runs, quantize the port message to the
   // next 8th-note grid point (grain spawning tolerates the small setTimeout jitter).
   burst() {
     const beat = this._beat;
+    const medium = this._medium;
     if (beat && beat.running) {
       const now = this.ctx.currentTime;
       const sec8th = 60 / beat.bpm / 2;
       const elapsed = now - beat.startTime;
       const nextGrid = Math.ceil(elapsed / sec8th) * sec8th + beat.startTime;
       const deltaMs = Math.max(0, nextGrid - now) * 1000;
-      setTimeout(() => this.node.port.postMessage({ type: 'burst' }), deltaMs);
+      setTimeout(() => {
+        this.node.port.postMessage({ type: 'burst' });
+        if (medium) medium.node.port.postMessage({ type: 'burst' });
+      }, deltaMs);
     } else {
       this.node.port.postMessage({ type: 'burst' });
+      if (medium) medium.node.port.postMessage({ type: 'burst' });
     }
+  }
+
+  // --- MEDIUM mode (v3.6, issue #44): second independent granular voice ---
+  // A second AudioWorkletNode instance of the same registered 'aether-granular'
+  // processor (own grain pool, own AudioParams) — not an extension of
+  // GranularProcessor, zero worklet code changes. Lazily created on first
+  // call so a session that never touches MEDIUM never allocates the node.
+  // Graph: node2 -> mediumGain -> duck -> output (taps the same sidechain
+  // duck + output bus as voice 1's dry path; no reverb send for voice 2).
+  async enableMedium() {
+    if (this._medium) return;
+    const node2 = new AudioWorkletNode(this.ctx, 'aether-granular', {
+      numberOfInputs: 0,
+      numberOfOutputs: 1,
+      outputChannelCount: [2],
+    });
+    const mediumGain = this.ctx.createGain();
+    mediumGain.gain.value = 0; // silent until setMediumActive(true) ramps it up
+    node2.connect(mediumGain).connect(this._duck);
+    this._medium = { node: node2, gain: mediumGain, active: false };
+  }
+
+  // Ramp voice 2's output gain in/out over ~150ms (setTargetAtTime, tau=0.05s
+  // reaches ~95% of the target by ~150ms). No-op if enableMedium() hasn't
+  // run yet — callers must enableMedium() before the first setMediumActive(true).
+  setMediumActive(on) {
+    if (!this._medium) return;
+    this._medium.active = !!on;
+    const t = this.ctx.currentTime;
+    this._medium.gain.gain.setTargetAtTime(on ? 1 : 0, t, 0.05);
+  }
+
+  get mediumEnabled() {
+    return !!this._medium;
+  }
+  get mediumActive() {
+    return this._medium ? this._medium.active : false;
+  }
+  // Voice-2 AudioParamMap, for mapping.js to write field-driven params into
+  // via the same _setParam()/setTargetAtTime pattern used for voice 1.
+  get mediumParams() {
+    return this._medium ? this._medium.node.parameters : null;
   }
 
   // --- Beat backbone (four-on-the-floor + sidechain) ---

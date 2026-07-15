@@ -4,6 +4,7 @@
 // never spam the audio thread's message/param queues.
 
 import { perfBus } from './midi/perf-bus.js';
+import { Field } from './medium/field.js';
 
 const EPS = 1e-3;
 const TAU = 0.04; // was 0.05 — trimmed for latency (task 5); still glitch-safe
@@ -39,6 +40,18 @@ const DEFAULT_ROOT_INDEX = 9; // 'A' — matches the original hardcoded A minor 
 const OCTAVE_COOLDOWN_MS = 600;
 const CHORD_ARP_HOLD_MS = 300; // left-hand 3-finger hold to flip chord<->arp
 
+// ---- MEDIUM mode tuning (v3.6, issue #44) --------------------------------
+// Hand-injection: landmark velocity (normalized-coord units/sec) -> grid
+// force/dye. Empirically tuned against the 32x24 grid + damping in field.js;
+// not derived from a physical unit system.
+const MEDIUM_SPLAT_RADIUS = 2.5; // grid cells, gaussian falloff (spec)
+const MEDIUM_FORCE_SCALE = 6; // hand velocity (coord units/sec) -> grid force
+const MEDIUM_DYE_SCALE = 0.6; // hand speed -> dye deposited per splat
+const MEDIUM_INJECT_MIN_SPEED = 0.02; // ignore sub-jitter hand motion
+// Field summary -> voice-2 param scaling.
+const MEDIUM_SPEED_TO_DENSITY = 3; // meanSpeed -> normalized 0..1 before density/gain lerp
+const MEDIUM_VORTICITY_TO_SPREAD = 0.015; // total |vorticity| -> normalized 0..1 spread
+
 // ---- exponential interpolation helpers ----------------------------------
 // lerp(a, b, t) in log-space: a * (b/a)^t
 function expLerp(a, b, t) {
@@ -68,6 +81,13 @@ export class Mapper {
       reverbMix: null,
       gain: null,
       chord: null,
+      // MEDIUM voice-2 params (distinct keys — same _setParam EPS-gate/perfBus
+      // pipeline, different AudioParamMap passed explicitly per-call).
+      mediumPosition: null,
+      mediumPitch: null,
+      mediumDensity: null,
+      mediumVoiceGain: null,
+      mediumSpread: null,
     };
 
     this._frozen = false;
@@ -115,7 +135,40 @@ export class Mapper {
     this._rafHandle = null;
     this._running = false;
 
+    // --- MEDIUM mode (v3.6, issue #44) ---
+    // Single flag gates every field/voice-2 code path added to _tick() below;
+    // with this false and MEDIUM never enabled, all of it is a no-op (DoD).
+    this.mediumOn = false;
+    // Field sim is always constructed (cheap: ~9 small Float32Arrays, no
+    // audio node), but step()/inject only run while mediumOn or the field
+    // still has residual energy from before MEDIUM was switched off.
+    this._field = new Field();
+    // Previous-frame index-fingertip position per hand, for finite-difference
+    // velocity (tracker only smooths/provides velocity for the palm centroid).
+    this._mediumLastTip = { left: null, right: null };
+
     this._boundTick = this._tick.bind(this);
+
+    // Debug hook for the verifier (Task A DoD) — introspection only, never
+    // creates audio nodes or changes behavior.
+    if (typeof window !== 'undefined') {
+      const self_ = this;
+      window.__AC_MEDIUM = {
+        get on() { return self_.mediumOn; },
+        fieldEnergy() { return self_._field.summary.energy; },
+        centroid() {
+          return { x: self_._field.summary.centroidX, y: self_._field.summary.centroidY };
+        },
+      };
+    }
+  }
+
+  // Public flag setter — Task B's MEDIUM ui-bar button calls this alongside
+  // engine.enableMedium()/setMediumActive(). Does not itself touch audio
+  // nodes; it only starts/stops the field sim + voice-2 param writes in
+  // _tick(). engine.setMediumActive(bool) is what fades voice-2 in/out.
+  setMediumOn(on) {
+    this.mediumOn = !!on;
   }
 
   start() {
@@ -168,7 +221,10 @@ export class Mapper {
     return def.map((offset) => ROOT_KEYS[(this._rootKeyIndex + offset) % 12]);
   }
 
-  _setParam(key, audioParamName, value, tauOverride) {
+  // `paramsMap` optionally targets a different AudioParamMap than voice 1's
+  // (used by MEDIUM's voice-2 writes below); omitted, behavior is byte-for-
+  // byte identical to before v3.6 — voice-1 mapping path is unchanged.
+  _setParam(key, audioParamName, value, tauOverride, paramsMap) {
     const last = this._last[key];
     if (last !== null && Math.abs(value - last) < EPS) return;
     this._last[key] = value;
@@ -176,7 +232,7 @@ export class Mapper {
     // perf-recorder.js (when armed) throttles this to ~30Hz and maps it to
     // a fixed CC number. No-op when nothing is subscribed.
     perfBus.emit('cc', { param: key, value });
-    const p = this.params.get(audioParamName);
+    const p = (paramsMap || this.params).get(audioParamName);
     const tau =
       tauOverride !== undefined
         ? tauOverride
@@ -195,6 +251,16 @@ export class Mapper {
 
     const state = this.tracker.getState();
     const { hands, gestures } = state;
+
+    // --- MEDIUM: fluid field sim (v3.6, issue #44) ---
+    // Injection only while MEDIUM is on; the sim itself keeps stepping (and
+    // voice 2 keeps sounding) for a bit after MEDIUM goes off, until the
+    // field's own energy/dye decay below epsilon and it goes back to sleep.
+    if (this.mediumOn) this._injectMediumField(hands, dt);
+    if (this.mediumOn || this._field.hasEnergy()) {
+      const fieldDt = Math.min(1 / 30, Math.max(1 / 120, dt));
+      this._field.step(fieldDt);
+    }
 
     // --- freeze ---
     if (gestures.freeze !== this._frozen) {
@@ -328,6 +394,11 @@ export class Mapper {
 
     this._handsPresent = anyHand;
 
+    // --- MEDIUM: field -> voice-2 param mapping ---
+    if (this.engine.mediumEnabled && (this.mediumOn || this._field.hasEnergy())) {
+      this._updateMediumVoice();
+    }
+
     // --- motion->sound latency estimate (proxy: gesture-result timestamp to
     // this setTargetAtTime-driving tick; not a measurement of the real audio
     // graph, no AudioParam read-back exists) ---
@@ -385,11 +456,130 @@ export class Mapper {
       encodeQueueSize: this.recorder ? this.recorder.encodeQueueSize : 0,
       recordError: this.recordState ? this.recordState.error : null,
       recordErrorUntil: this.recordState ? this.recordState.errorUntil : 0,
+      // MEDIUM field state for Task B's visuals layer (v3.6, issue #44).
+      // `on` is the authoritative "should this contribute visually" flag —
+      // Task B must gate texture upload/sampling on it, not on dye/energy
+      // alone, so the layer is exactly zero-contribution when MEDIUM is off
+      // and the field has already gone fully quiet.
+      // dye/vx/vy are direct Float32Array references into the field's
+      // current ping-pong buffer (no copy) — read them synchronously within
+      // this frame's renderer.frame() call; they get overwritten in place
+      // next tick.
+      field: {
+        on: this.mediumOn,
+        nx: this._field.nx,
+        ny: this._field.ny,
+        dye: this._field.dye,
+        vx: this._field.vx,
+        vy: this._field.vy,
+        centroidX: this._field.summary.centroidX,
+        centroidY: this._field.summary.centroidY,
+        meanSpeed: this._field.summary.meanSpeed,
+        vorticity: this._field.summary.vorticity,
+        energy: this._field.summary.energy,
+      },
     };
 
     this.renderer.frame(dt, rendererState);
 
     this._rafHandle = requestAnimationFrame(this._boundTick);
+  }
+
+  // Inject hand motion into the fluid field: palm centroid (tracker already
+  // gives a smoothed velocity for it) + index fingertip (landmark 8; the
+  // tracker doesn't smooth/track fingertip velocity, so it's finite-
+  // differenced here against last frame's tip position). Both hands inject
+  // independently; called only while this.mediumOn (spec: "injection only
+  // while MEDIUM on").
+  _injectMediumField(hands, dt) {
+    const field = this._field;
+    const dtSafe = dt > 1e-4 ? dt : 1e-4;
+    const sides = ['left', 'right'];
+    for (let s = 0; s < sides.length; s++) {
+      const side = sides[s];
+      const hand = hands[side];
+      if (!hand) {
+        this._mediumLastTip[side] = null;
+        continue;
+      }
+
+      // Palm centroid — hand.velocity is already OneEuro-smoothed, normalized
+      // coord-units/sec.
+      const pvx = hand.velocity.x;
+      const pvy = hand.velocity.y;
+      const palmSpeed = Math.sqrt(pvx * pvx + pvy * pvy);
+      if (palmSpeed > MEDIUM_INJECT_MIN_SPEED) {
+        field.splat(
+          hand.x, hand.y,
+          pvx * MEDIUM_FORCE_SCALE, pvy * MEDIUM_FORCE_SCALE,
+          Math.min(1, palmSpeed * MEDIUM_DYE_SCALE),
+          MEDIUM_SPLAT_RADIUS,
+        );
+      }
+
+      // Index fingertip (MediaPipe landmark 8), finite-difference velocity.
+      const lm = hand.landmarks;
+      const tipX = lm[8 * 3];
+      const tipY = lm[8 * 3 + 1];
+      const prevTip = this._mediumLastTip[side];
+      if (prevTip) {
+        const tvx = (tipX - prevTip.x) / dtSafe;
+        const tvy = (tipY - prevTip.y) / dtSafe;
+        const tipSpeed = Math.sqrt(tvx * tvx + tvy * tvy);
+        if (tipSpeed > MEDIUM_INJECT_MIN_SPEED) {
+          field.splat(
+            tipX, tipY,
+            tvx * MEDIUM_FORCE_SCALE, tvy * MEDIUM_FORCE_SCALE,
+            Math.min(1, tipSpeed * MEDIUM_DYE_SCALE),
+            MEDIUM_SPLAT_RADIUS,
+          );
+        }
+      }
+      let tipRec = prevTip;
+      if (!tipRec) {
+        tipRec = { x: tipX, y: tipY };
+        this._mediumLastTip[side] = tipRec;
+      } else {
+        tipRec.x = tipX;
+        tipRec.y = tipY;
+      }
+    }
+  }
+
+  // Map the field summary onto voice 2's AudioParams, via the same
+  // _setParam() EPS-gate/smoothing/perfBus pipeline voice 1 uses.
+  _updateMediumVoice() {
+    const mp = this.engine.mediumParams;
+    if (!mp) return;
+    const f = this._field.summary;
+
+    // dye-weighted energy centroid X -> playhead position.
+    this._setParam('mediumPosition', 'position', f.centroidX, undefined, mp);
+
+    // centroid Y -> pitch, quantized through the SAME active scale/root as
+    // voice 1 (harmonic coherence between the two grammars).
+    const bandDefs = SCALE_DEFS[this._scaleId];
+    const band = Math.min(bandDefs.length - 1, Math.floor((1 - f.centroidY) * bandDefs.length));
+    const rootOffset = this._rootKeyIndex - DEFAULT_ROOT_INDEX;
+    const semitones = bandDefs[band] + rootOffset;
+    const mediumPitch = Math.max(0.25, Math.min(4, Math.pow(2, semitones / 12)));
+    this._setParam('mediumPitch', 'pitch', mediumPitch, TAU_PITCH_GLIDE, mp);
+
+    // mean field speed -> grain density; density's own minValue is 1 (never
+    // truly silent on its own), so voice 2's `gain` AudioParam rides the same
+    // normalized speed so the medium actually goes silent once the field is
+    // still, per spec ("silence when field is still — the medium must
+    // audibly die out").
+    const speedNorm = Math.min(1, f.meanSpeed * MEDIUM_SPEED_TO_DENSITY);
+    this._setParam('mediumDensity', 'density', 1 + speedNorm * 40, undefined, mp);
+    this._setParam('mediumVoiceGain', 'gain', speedNorm * 0.8, undefined, mp);
+
+    // total |vorticity| -> `spread` (per-grain position spray/jitter) — the
+    // closest existing AudioParam to "turbulence": grainSize is duration,
+    // not variability, while `spread` literally scales the random per-grain
+    // position jitter in granular-worklet.js (`_spawn()`), which is exactly
+    // the "spray" character called for.
+    this._setParam('mediumSpread', 'spread', Math.min(1, f.vorticity * MEDIUM_VORTICITY_TO_SPREAD), undefined, mp);
   }
 
   _setReverb(target) {

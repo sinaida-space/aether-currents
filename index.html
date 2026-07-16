@@ -73,7 +73,7 @@
       <ul class="boot-gdpr-list">
         <li>Your camera is processed entirely on-device — video is never uploaded, stored, or sent anywhere.</li>
         <li>No cookies. No analytics. No server. This is a static page.</li>
-        <li>4 keys saved to your browser's localStorage, nothing else: <code>ac.consent</code> (this consent), <code>ac.mode</code> (FULL/LIGHT mode), <code>ac.bg</code> (background choice), <code>ac.osd</code> (VHS overlay toggle).</li>
+        <li>5 keys saved to your browser's localStorage, nothing else: <code>ac.consent</code> (this consent), <code>ac.mode</code> (FULL/BALANCED/LIGHT tier), <code>ac.modeSource</code> (auto-detected vs. your explicit tier choice), <code>ac.bg</code> (background choice), <code>ac.osd</code> (VHS overlay toggle).</li>
         <li>The hand-tracking model file is fetched once from Google's MediaPipe CDN — a standard file request, no video or gesture data involved.</li>
       </ul>
       <div class="btn-row">
@@ -222,7 +222,7 @@
   </div>
   <div class="dos-panel-note attribution-notice">
     ATTRIBUTION REQUIRED — post this line wherever you publish:<br />
-    <code id="credit-line">Made with AETHER CURRENTS by Sinaida — sinaida.eu</code>
+    <code id="credit-line">AETHER CURRENTS — Sinaida (design &amp; development), Telefm (granular synthesis guidance) — sinaida.eu</code>
   </div>
   <div class="btn-row">
     <button id="btn-copy-credit" class="btn">▸ COPY CREDIT LINE</button>

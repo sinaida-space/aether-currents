@@ -1,10 +1,19 @@
 // AETHER CURRENTS — capability probe
-// Decides FULL vs LIGHT mode based on GPU renderer string, CPU cores,
-// device memory, connection quality, and a measured WebGL2 render score.
+// Decides FULL vs BALANCED vs LIGHT mode based on GPU renderer string, CPU
+// cores, device memory, connection quality, and a measured WebGL2 render
+// score.
 
 const PROBE_QUADS = 200;
 const PROBE_FRAMES = 60;
 const PROBE_SIZE = 512;
+// Two cutoffs on the same render-score probe (avg ms/frame drawing 200
+// overlapping-blur quads at 512px): unchanged 12ms boundary still separates
+// "can't hold FULL" from everything else; a new 6ms boundary — half of that,
+// i.e. double the headroom — separates genuinely strong GPUs (FULL) from
+// mid-tier ones (BALANCED). Machines between the two cutoffs get BALANCED
+// regardless of core/memory checks, since those checks below are really
+// proxies for "will this choke," not "is this exceptional."
+const FAST_FRAME_MS = 6;
 const SLOW_FRAME_MS = 12;
 
 const VERT_SRC = `#version 300 es
@@ -133,7 +142,7 @@ function updateStatus(onStatus, text) {
 /**
  * Run the system capability probe.
  * @param {(text: string) => void} [onStatus] optional callback for animated status text
- * @returns {Promise<{recommended: 'full'|'light', details: {gpu: string, cores: number, memoryGB: number|null, connection: string, renderScore: number}}>}
+ * @returns {Promise<{recommended: 'full'|'balanced'|'light', details: {gpu: string, cores: number, memoryGB: number|null, connection: string, renderScore: number}}>}
  */
 export async function runSystemCheck(onStatus) {
   const startTime = performance.now();
@@ -172,15 +181,22 @@ export async function runSystemCheck(onStatus) {
 
   const intelWeak = /intel(?!.*(iris xe|arc))/i.test(gpu);
   const slowScore = renderScore > SLOW_FRAME_MS;
+  const fastScore = renderScore <= FAST_FRAME_MS;
+  const weakCores = cores < 4;
+  const weakMemory = memoryGB !== null && memoryGB < 4;
 
-  let recommended = 'full';
-  if (
-    slowScore ||
-    cores < 4 ||
-    (memoryGB !== null && memoryGB < 4) ||
-    (intelWeak && slowScore)
-  ) {
+  // Three-way decision (issue #48): the original LIGHT-vs-FULL gate is
+  // unchanged (same conditions, same cutoff) — it now just means "LIGHT vs.
+  // anything better." BALANCED is the new middle ground: neither weak enough
+  // to fail that gate, nor fast/plentiful enough to clear the stricter FULL
+  // bar (fast render score, 8+ cores, no weak-Intel flag). Everything that
+  // doesn't clear FULL but also doesn't trip the LIGHT gate lands on
+  // BALANCED by default.
+  let recommended = 'balanced';
+  if (slowScore || weakCores || weakMemory || (intelWeak && slowScore)) {
     recommended = 'light';
+  } else if (fastScore && cores >= 8 && !intelWeak) {
+    recommended = 'full';
   }
 
   updateStatus(onStatus, `SYSTEM CHECK... done (${elapsed.toFixed(0)}ms)`);

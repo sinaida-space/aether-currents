@@ -452,14 +452,16 @@ body.legal-page {
   margin-bottom: 0.75rem;
 }
 
-#sample-list {
+#sample-list,
+#midi-port-list {
   list-style: none;
   margin: 0 0 0.75rem;
   padding: 0;
   font-size: 0.9rem;
 }
 
-#sample-list li {
+#sample-list li,
+#midi-port-list li {
   padding: 0.35rem 0.25rem;
   color: var(--white);
   cursor: pointer;
@@ -467,7 +469,8 @@ body.legal-page {
 }
 
 #sample-list li:hover,
-#sample-list li.active {
+#sample-list li.active,
+#midi-port-list li:hover {
   background: var(--red);
   color: var(--black);
 }

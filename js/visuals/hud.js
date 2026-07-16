@@ -210,22 +210,28 @@ export class Hud {
       // which made it impossible to tell when capture had started), STBY
       // otherwise. Counter shows recording elapsed while recording, cam
       // uptime on standby.
+      // Continues below the system block's `y` cursor (version/mode/smp/etc.)
+      // instead of a fixed pad/pad+lh — those two positions used to collide
+      // with "AETHER CURRENTS vX.X.X" and "MODE: ..." whenever the OSD was
+      // on (its default), garbling both into unreadable overlapping text.
       ctx.textAlign = 'right';
       const rx = W - pad;
+      const osdY0 = y;
+      const osdY1 = y + lh;
       if (s.recording) {
         if (blinkOn) {
           ctx.fillStyle = RED; ctx.shadowColor = RED;
-          ctx.fillText('● REC', rx, pad);
+          ctx.fillText('● REC', rx, osdY0);
         }
       } else {
         ctx.fillStyle = DIM; ctx.shadowColor = WHITE;
-        ctx.fillText('STBY', rx, pad);
+        ctx.fillText('STBY', rx, osdY0);
       }
       const sec = s.recording ? recSec : Math.floor((osd.camMs || 0) / 1000);
       const mm = String(Math.floor(sec / 60) % 60).padStart(2, '0');
       const ss = String(sec % 60).padStart(2, '0');
       ctx.fillStyle = WHITE; ctx.shadowColor = WHITE;
-      ctx.fillText(`SP 0:${mm}:${ss}`, rx, pad + lh);
+      ctx.fillText(`SP 0:${mm}:${ss}`, rx, osdY1);
 
       // bottom-left: date stamp + battery glyph
       const d = new Date();

@@ -120,7 +120,7 @@ async function runProbeAndShowModes() {
 // ---------------------------------------------------------------------------
 
 const BOOT_LINES = [
-  { text: 'AETHER BIOS v3.2.0 — (C) SINAIDA SYSTEMS' },
+  { text: 'AETHER BIOS v3.7.0 — (C) SINAIDA SYSTEMS' },
   { memory: true },
   { text: 'AETHER SOUND DRIVER ........ OK' },
   { text: 'HAND TRACKING MODULE ....... OK' },
@@ -622,7 +622,7 @@ function startPerfWatchdog(renderer, currentMode) {
   }, PERF_WATCHDOG_SAMPLE_MS);
 }
 
-const CREDIT_LINE = 'Made with AETHER CURRENTS by Sinaida — sinaida.eu';
+const CREDIT_LINE = 'AETHER CURRENTS — Sinaida (design & development), Telefm (granular synthesis guidance) — sinaida.eu';
 const MIC_LABEL = '▸ RECORD MIC (4S)';
 
 function progressBar(frac) {

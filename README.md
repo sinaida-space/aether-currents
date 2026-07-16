@@ -65,6 +65,13 @@ FIST ............. freeze the cloud
 FAST OPEN PALM ... burst
 ```
 
+## MIDI out
+
+Gesture and beat events stream live as MIDI CC/notes to any Web MIDI output
+port — `▸ MIDI` in the control row, or the `M` key. Turns the instrument into
+a live controller for Ableton, TouchDesigner, or hardware. See
+[docs/midi.md](docs/midi.md) for the full CC table and DAW setup.
+
 ## Running locally
 
 ```

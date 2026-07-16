@@ -8,10 +8,51 @@ Conduct sound with your hands. A browser-based instrument: on-device hand
 tracking drives granular audio synthesis and a real-time visual layer.
 Static site, no build step, no framework — vanilla JS/CSS with ES modules.
 
+Developed by Sinaida, a new media artist currently based in Prague, working
+in interactive projection, TouchDesigner, GLSL and generative AI. Telefm
+(Belgrade) contributed the granular synthesis design and hands-on usage
+feedback that shaped the instrument's gesture language.
+
 ## Artists
 
-- **Sinaida** — [sinaida.eu](https://sinaida.eu)
-- **Telefm** (Belgrade) — [telefm.bandcamp.com](https://telefm.bandcamp.com/)
+- **Sinaida** — new media artist, Prague — [sinaida.eu](https://sinaida.eu) — concept, design, engineering
+- **Telefm** (Belgrade) — [telefm.bandcamp.com](https://telefm.bandcamp.com/) — granular synth design, usage feedback
+
+## Quality tiers
+
+Aether Currents auto-detects device capability on load (`syscheck.js`) and
+applies the best-fitting tier, with a sticky user-override if you switch
+manually:
+
+```
+FULL ....... full-resolution field sim, 60Hz tracking
+BALANCED ... 192-particle sim, 45Hz / 640px tracking
+LIGHT ...... minimal sim, lowest tracking load
+```
+
+A perf watchdog steps down one tier at a time (never straight to LIGHT) if
+frame time degrades, keeping hand-following latency as tight as possible on
+the current device.
+
+## Scriabin color mapping
+
+Each of the 12 chromatic notes played tints the visual field with its
+canonical Scriabin synesthesia color — Alexander Scriabin's own
+note-to-color correspondences, rather than an arbitrary palette:
+
+```
+C  ...... red        F  ...... deep red
+C# ...... violet      F# ...... bright azure
+D  ...... yellow      G  ...... orange
+D# ...... steel glint G# ...... purple-violet
+E  ...... pearly moonlit A  ... green
+                       A# ...... rosy steel
+                       B  ...... pearly blue
+```
+
+The active note's color is derived from root + scale position each frame
+and smoothed over ~100ms so octave and band changes glide rather than flash;
+spectral centroid and level modulate brightness/saturation around that hue.
 
 ## Gestures
 

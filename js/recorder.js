@@ -324,6 +324,9 @@ export class Recorder {
     this._pcmNode = null;
     if (this._compositeRaf) { clearTimeout(this._compositeRaf); this._compositeRaf = null; }
     if (this._stopTimer) { clearTimeout(this._stopTimer); this._stopTimer = null; }
+    if (this._compositeCanvas && this._compositeCanvas.parentNode) this._compositeCanvas.parentNode.removeChild(this._compositeCanvas);
+    this._compositeCanvas = null;
+    this._compositeCtx = null;
     this.recording = false;
   }
 
@@ -351,6 +354,21 @@ export class Recorder {
     const canvas = document.createElement('canvas');
     canvas.width = cw;
     canvas.height = ch;
+    // Must be attached to the document — WebKit (Safari, and iOS Chrome/
+    // Firefox/etc, which all run on WebKit under Apple's engine mandate)
+    // reliably fails to deliver live frames from captureStream() on a
+    // canvas that was never inserted into the DOM: the resulting video
+    // track exists but stays frozen/blank, which finalize()s into an empty
+    // recording indistinguishable from "no video track" without a device
+    // to inspect. Desktop Chrome doesn't have this restriction, which is
+    // why this bug only ever showed up on mobile. Kept out of the visible
+    // layout (off-screen, not display:none — a display:none canvas isn't
+    // painted at all, which would defeat the purpose).
+    canvas.style.position = 'fixed';
+    canvas.style.left = '-99999px';
+    canvas.style.top = '0';
+    canvas.style.pointerEvents = 'none';
+    document.body.appendChild(canvas);
     this._compositeCanvas = canvas;
     this._compositeCtx = canvas.getContext('2d');
     // Force one real paint onto the composite canvas *before* anything probes
@@ -373,10 +391,17 @@ export class Recorder {
     // hold a real painted frame.
     this._useMp4 = await probeMp4Support(cw, ch, this.ctx.sampleRate, this._recordFps);
 
+    // Always run the MediaRecorder/webm capture too, even when the WebCodecs
+    // MP4 path is available. It's the safety net: a mid-recording
+    // VideoEncoder/AudioEncoder error (or a muxer that ends up with zero
+    // salvageable samples) used to mean the whole video was lost — only the
+    // WAV survived, no matter how long the take was. Running both in
+    // parallel means stop() can fall back to the webm capture whenever the
+    // MP4 finalize comes up empty, so "video capture failed" only happens if
+    // *both* independent paths fail.
+    this._startWebmRecorder(canvas);
     if (this._useMp4) {
       this._startMp4Encoders(cw, ch);
-    } else {
-      this._startWebmRecorder(canvas);
     }
 
     // --- parallel PCM tap for WAV (also feeds the AAC encoder on the MP4 path) ---
@@ -649,11 +674,15 @@ export class Recorder {
     if (this._compositeRaf) { clearTimeout(this._compositeRaf); this._compositeRaf = null; }
 
     // --- finalize video — never let a dead/errored encoder throw here.
-    // Each step is independently guarded so a failure in one (e.g. video
-    // flush after a VideoEncoder error) still lets the rest of stop() run
-    // and salvage the audio (WAV always available — the PCM tap is
-    // independent of the encoders) and, where possible, a partial video.
+    // Both the MP4/WebCodecs path and the MediaRecorder/webm path run in
+    // parallel (see _start()), so each is finalized independently and the
+    // MP4 result wins when usable. The webm capture is the fallback: if the
+    // MP4 muxer comes up empty (e.g. a VideoEncoder/AudioEncoder error mid-
+    // recording), stop() now uses the webm blob instead of declaring the
+    // whole video lost. Audio (WAV) is unaffected either way — the PCM tap
+    // is independent of both video paths.
     let videoBlob = null, videoKind = null, ext = null;
+
     if (this._useMp4) {
       const v = this._videoEncoder;
       const a = this._audioEncoder;
@@ -672,32 +701,42 @@ export class Recorder {
           ext = 'mp4';
         }
       } catch (e) {
-        console.error('[recorder] mp4 finalize failed — no video salvageable, WAV export still available', e);
-        this._onError?.('VIDEO LOST — audio saved');
+        console.error('[recorder] mp4 finalize failed — falling back to webm capture', e);
       }
       this._muxer = null;
       this._muxerTarget = null;
-    } else {
-      const mr = this._mediaRecorder;
-      try {
-        if (mr && mr.state !== 'inactive') {
-          const webmDone = new Promise((resolve) => { mr.onstop = resolve; });
-          mr.stop();
-          await webmDone;
-        }
-        if (this._videoChunks.length) {
-          videoBlob = new Blob(this._videoChunks, { type: this._mimeType || 'video/webm' });
-          // Safari's MediaRecorder produces video/mp4 on this fallback path —
-          // name the file by what was actually recorded, not always .webm.
-          videoKind = (this._mimeType || '').includes('mp4') ? 'mp4' : 'webm';
-          ext = videoKind;
-        }
-      } catch (e) {
-        console.error('[recorder] webm finalize failed — no video salvageable, WAV export still available', e);
-        this._onError?.('VIDEO LOST — audio saved');
+    }
+
+    // webm capture always ran (safety net); only needed as the result when
+    // the MP4 path above didn't produce a usable blob.
+    const mr = this._mediaRecorder;
+    try {
+      if (mr && mr.state !== 'inactive') {
+        const webmDone = new Promise((resolve) => { mr.onstop = resolve; });
+        mr.stop();
+        await webmDone;
       }
-      this._mediaRecorder = null;
-      this._videoChunks = [];
+      if (!videoBlob && this._videoChunks.length) {
+        videoBlob = new Blob(this._videoChunks, { type: this._mimeType || 'video/webm' });
+        // Safari's MediaRecorder produces video/mp4 on this fallback path —
+        // name the file by what was actually recorded, not always .webm.
+        videoKind = (this._mimeType || '').includes('mp4') ? 'mp4' : 'webm';
+        ext = videoKind;
+      }
+    } catch (e) {
+      console.error('[recorder] webm finalize failed', e);
+    }
+    this._mediaRecorder = null;
+    this._videoChunks = [];
+
+    // Safe to detach now — both capture paths are fully flushed/stopped above.
+    if (this._compositeCanvas && this._compositeCanvas.parentNode) this._compositeCanvas.parentNode.removeChild(this._compositeCanvas);
+    this._compositeCanvas = null;
+    this._compositeCtx = null;
+
+    if (!videoBlob) {
+      console.error('[recorder] no video salvageable from either capture path — WAV export still available');
+      this._onError?.('VIDEO LOST — audio saved');
     }
 
     // --- finalize audio tap (always attempted — independent of encoder health) ---

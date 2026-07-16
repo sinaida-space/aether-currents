@@ -473,6 +473,8 @@ body.legal-page {
 }
 
 #sample-list li .key-hint {
+  display: inline-block;
+  min-width: 1.8rem;
   color: var(--cyan);
   margin-right: 0.6rem;
 }

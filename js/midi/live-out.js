@@ -19,7 +19,10 @@ export class MidiLiveOut {
     this._unsubs = [];
     this._lastCcMs = {};
     this._lastCcValue = {};
-    this._pendingOffs = new Set(); // setTimeout ids, cleared on disconnect
+    // { offBytes, dueAt } records for note-offs scheduled on the port's own
+    // clock (see _sendWithOff) — not setTimeout ids. Used so disconnect()
+    // can flush any not-yet-fired note-offs before the port is dropped.
+    this._pendingOffs = new Set();
   }
 
   get supported() {
@@ -75,7 +78,19 @@ export class MidiLiveOut {
   disconnect() {
     for (const unsub of this._unsubs) unsub();
     this._unsubs = [];
-    for (const id of this._pendingOffs) clearTimeout(id);
+    // Flush any note-offs that haven't fired yet, while the port reference
+    // is still valid — otherwise switching ports (or OFF) inside the
+    // note-off window leaves a stuck note on the synth/DAW.
+    if (this._port) {
+      for (const record of this._pendingOffs) {
+        try {
+          this._port.send(record.offBytes);
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error('[live-out] failed to flush pending note-off:', err);
+        }
+      }
+    }
     this._pendingOffs.clear();
     this._lastCcMs = {};
     this._lastCcValue = {};
@@ -87,13 +102,22 @@ export class MidiLiveOut {
     this._port.send(bytes);
   }
 
+  // Sends the note-on immediately and schedules the note-off via the Web
+  // MIDI port's own clock (a DOMHighResTimeStamp on the same timeline as
+  // performance.now()) rather than setTimeout. Timer-based scheduling gets
+  // throttled when the tab is backgrounded (observed ~730ms late instead of
+  // ~50ms), causing stuck notes — port.send(bytes, timestamp) is handled by
+  // the browser's MIDI scheduler and isn't subject to that throttling.
+  // We still track pending offs (not for delivery, just so disconnect() can
+  // flush anything not yet fired, and so this bookkeeping set doesn't leak).
   _sendWithOff(onBytes, offBytes) {
+    if (!this._port) return;
     this._send(onBytes);
-    const id = setTimeout(() => {
-      this._pendingOffs.delete(id);
-      this._send(offBytes);
-    }, NOTE_OFF_MS);
-    this._pendingOffs.add(id);
+    const dueAt = performance.now() + NOTE_OFF_MS;
+    this._port.send(offBytes, dueAt);
+    const record = { offBytes, dueAt };
+    this._pendingOffs.add(record);
+    setTimeout(() => this._pendingOffs.delete(record), NOTE_OFF_MS);
   }
 
   _subscribe() {
@@ -110,8 +134,8 @@ export class MidiLiveOut {
       this._send([0xb0, cc, norm]); // channel 1 (status nibble 0xB0)
     };
 
-    const onKick = () => this._sendWithOff([0x99, 36, 100], [0x89, 36, 0]); // ch10 idx9
-    const onHat = () => this._sendWithOff([0x99, 42, 100], [0x89, 42, 0]); // ch10 idx9
+    const onKick = () => this._sendWithOff([0x99, 36, 100], [0x89, 36, 0]); // ch10 idx9, matches perf-recorder.js
+    const onHat = () => this._sendWithOff([0x99, 42, 90], [0x89, 42, 0]); // ch10 idx9, matches perf-recorder.js
 
     const onSampleSwitch = ({ laneIndex, on }) => {
       if (laneIndex == null) return;

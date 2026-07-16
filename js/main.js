@@ -911,9 +911,15 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
   const btnCloseMidi = document.getElementById('btn-close-midi');
 
   const liveOut = new MidiLiveOut();
-  liveOut.onDisconnect = () => {
+  liveOut.onDisconnect = async () => {
     updateMidiButton();
-    if (midiMenu.style.display !== 'none') renderMidiPortList([]);
+    // Refetch the live port list rather than hardcoding empty — if the user
+    // has multiple ports and only one unplugs, this keeps the others in the
+    // panel instead of wiping it until they manually reopen it.
+    if (midiMenu.style.display !== 'none') {
+      const ports = await liveOut.listPorts();
+      renderMidiPortList(ports);
+    }
   };
 
   function getStoredMidiName() {

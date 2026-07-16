@@ -73,7 +73,7 @@
       <ul class="boot-gdpr-list">
         <li>Your camera is processed entirely on-device — video is never uploaded, stored, or sent anywhere.</li>
         <li>No cookies. No analytics. No server. This is a static page.</li>
-        <li>4 keys saved to your browser's localStorage, nothing else: <code>ac.consent</code> (this consent), <code>ac.mode</code> (FULL/LIGHT mode), <code>ac.bg</code> (background choice), <code>ac.osd</code> (VHS overlay toggle).</li>
+        <li>5 keys saved to your browser's localStorage, nothing else: <code>ac.consent</code> (this consent), <code>ac.mode</code> (FULL/BALANCED/LIGHT tier), <code>ac.modeSource</code> (auto-detected vs. your explicit tier choice), <code>ac.bg</code> (background choice), <code>ac.osd</code> (VHS overlay toggle).</li>
         <li>The hand-tracking model file is fetched once from Google's MediaPipe CDN — a standard file request, no video or gesture data involved.</li>
       </ul>
       <div class="btn-row">
@@ -119,6 +119,7 @@
       <div id="syscheck-details"></div>
       <div class="btn-row">
         <button id="btn-start-full" class="btn">▸ START — FULL MODE</button>
+        <button id="btn-start-balanced" class="btn">▸ START — BALANCED MODE</button>
         <button id="btn-start-light" class="btn">▸ START — LIGHT MODE</button>
       </div>
     </div>
@@ -130,11 +131,11 @@
 
     <h2>ARTISTS</h2>
     <p class="credit artists">
-      Sinaida — <a href="https://sinaida.eu">sinaida.eu</a><br />
-      Telefm (Belgrade) — <a href="https://telefm.bandcamp.com/">telefm.bandcamp.com</a>
+      SINAIDA — design & development — <a href="https://sinaida.eu">sinaida.eu</a><br />
+      TELEFM — guidance on granular synthesis — <a href="https://telefm.bandcamp.com/">telefm.bandcamp.com</a> (Belgrade)
     </p>
     <p class="credit artists">
-      Sinaida built AETHER CURRENTS with Kamil Yegelev, known as Telefm, a musician in Belgrade, over a shared conviction that AI-era tools do not have to flatten performance into a prompt. AETHER CURRENTS is a live medium that turns algorithmic tools into a dynamic extension of the physical body, translating movement into sonic and visual currents.
+      AETHER CURRENTS is a live medium that turns algorithmic tools into a dynamic extension of the physical body, translating movement into sonic and visual currents. Designed and developed by Sinaida, with guidance from Kamil Yegelev (Telefm) on the granular synthesis process — a shared conviction that AI-era tools do not have to flatten performance into a prompt.
     </p>
     <p class="credit dos-link">C:\&gt; <a href="https://youtu.be/fxrrSxvKp9Q" target="_blank" rel="noopener">WATCH DEMO.EXE</a></p>
 
@@ -221,7 +222,7 @@
   </div>
   <div class="dos-panel-note attribution-notice">
     ATTRIBUTION REQUIRED — post this line wherever you publish:<br />
-    <code id="credit-line">Made with AETHER CURRENTS by Sinaida — sinaida.eu</code>
+    <code id="credit-line">AETHER CURRENTS — Sinaida (design &amp; development), Telefm (granular synthesis guidance) — sinaida.eu</code>
   </div>
   <div class="btn-row">
     <button id="btn-copy-credit" class="btn">▸ COPY CREDIT LINE</button>

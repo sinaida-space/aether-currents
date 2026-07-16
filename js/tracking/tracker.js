@@ -9,11 +9,18 @@ const LANDMARK_COUNT = 21;
 // FULL mode's tracking rate was raised 40->60Hz (task 5): FULL is only ever
 // selected by syscheck.js's capability probe (WebGL2 render-score + GPU/CPU/
 // memory heuristics) after confirming the machine has headroom, so the extra
-// worker round-trips ride on capacity already validated at boot. LIGHT stays
-// at 20Hz — it's the fallback path for exactly the machines without headroom.
+// worker round-trips ride on capacity already validated at boot.
+// BALANCED (issue #48) sits between the two: 45Hz/640px for machines with
+// partial headroom.
+// LIGHT was raised 20->30Hz (issue #48): latency diagnosis showed tracking
+// cadence (up to 50ms/frame at 20Hz), not particle count, was the dominant
+// perceived-lag contributor on the fallback tier — 30Hz nearly halves that
+// worst-case per-frame gap while staying well within reach of machines
+// without full-tier headroom.
 const MODE_CONFIG = {
   full: { sendHz: 60, resizeWidth: 720 },
-  light: { sendHz: 20, resizeWidth: 480 },
+  balanced: { sendHz: 45, resizeWidth: 640 },
+  light: { sendHz: 30, resizeWidth: 480 },
 };
 
 // Handedness note (see report): the <video id="cam"> element carries no
@@ -44,7 +51,17 @@ class OneEuro {
   // response without materially increasing jitter at rest — the low-speed
   // floor (minCutoff) still rejects micro-tremor. dCutoff left at 1.0 (only
   // affects derivative-estimate smoothing, not a latency-critical term).
-  constructor(minCutoff = 1.8, beta = 0.015, dCutoff = 1.0) {
+  //
+  // Re-tuned again for hand-following tightness (issue #48): minCutoff
+  // 1.8->2.2 tightens the low-speed floor further (less baseline lag on slow
+  // moves, the dominant contributor per the accepted diagnosis); beta
+  // 0.015->0.05 makes the adaptive term open up much faster once the hand is
+  // moving at any real speed, so fast gestures track far more tightly.
+  // Verified against a still-hand synthetic input (constant x, zero
+  // velocity): with dxHat ~= 0, cutoff collapses to minCutoff regardless of
+  // beta, so raising beta alone cannot introduce jitter at rest — only
+  // moving-hand response changes.
+  constructor(minCutoff = 2.2, beta = 0.05, dCutoff = 1.0) {
     this.minCutoff = minCutoff;
     this.beta = beta;
     this.dCutoff = dCutoff;
@@ -258,7 +275,7 @@ export class HandTracker {
 
   constructor(video, mode) {
     this.video = video;
-    this.mode = mode === 'light' ? 'light' : 'full';
+    this.mode = mode === 'light' || mode === 'balanced' ? mode : 'full';
     this.landmarker = null;
     this._running = false;
     this._busy = false;

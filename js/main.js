@@ -14,6 +14,10 @@ import { requestTutorial, isTutorialRequested, startTutorial } from './tutorial.
 
 const CONSENT_KEY = 'ac.consent';
 const MODE_KEY = 'ac.mode';
+const MODE_SOURCE_KEY = 'ac.modeSource';
+
+const TIER_LABEL = { full: 'FULL', balanced: 'BALANCED', light: 'LIGHT' };
+const NEXT_TIER_DOWN = { full: 'balanced', balanced: 'light', light: null };
 
 const welcome = document.getElementById('welcome');
 const modeSelect = document.getElementById('mode-select');
@@ -23,6 +27,7 @@ const bootGdpr = document.getElementById('boot-gdpr');
 const btnBootAccept = document.getElementById('btn-boot-accept');
 const asciiGlyphs = document.getElementById('ascii-glyphs');
 const btnStartFull = document.getElementById('btn-start-full');
+const btnStartBalanced = document.getElementById('btn-start-balanced');
 const btnStartLight = document.getElementById('btn-start-light');
 const btnTutorial = document.getElementById('btn-tutorial');
 const syscheckStatus = document.getElementById('syscheck-status');
@@ -48,8 +53,20 @@ function setConsent() {
   localStorage.setItem(CONSENT_KEY, '1');
 }
 
-function storeMode(mode) {
+// source: 'auto' (syscheck-applied, overridable by a future auto-apply) or
+// 'user' (explicit choice — sticky, never overwritten by auto-apply again).
+function storeMode(mode, source) {
   localStorage.setItem(MODE_KEY, mode);
+  localStorage.setItem(MODE_SOURCE_KEY, source);
+}
+
+function getStoredMode() {
+  const m = localStorage.getItem(MODE_KEY);
+  return m === 'full' || m === 'balanced' || m === 'light' ? m : null;
+}
+
+function getModeSource() {
+  return localStorage.getItem(MODE_SOURCE_KEY);
 }
 
 function formatDetails(details) {
@@ -60,6 +77,8 @@ function formatDetails(details) {
     `RENDER SCORE: ${details.renderScore.toFixed(2)}ms/frame`
   );
 }
+
+const TIER_BUTTON = { full: btnStartFull, balanced: btnStartBalanced, light: btnStartLight };
 
 async function runProbeAndShowModes() {
   modeSelect.style.display = 'block';
@@ -73,16 +92,31 @@ async function runProbeAndShowModes() {
 
   syscheckDetails.textContent = formatDetails(probe.details);
 
-  btnStartFull.classList.remove('recommended');
-  btnStartLight.classList.remove('recommended');
-
-  if (probe.recommended === 'light') {
-    syscheckStatus.textContent = 'SYSTEM CHECK: LIGHT MODE recommended — you can still try it here ▸';
-    btnStartLight.classList.add('recommended');
-  } else {
-    syscheckStatus.textContent = 'SYSTEM CHECK: FULL MODE recommended ▸';
-    btnStartFull.classList.add('recommended');
+  // Auto-apply (issue #48): a prior explicit tier choice ('user') is sticky
+  // and never overridden by a fresh probe result. Otherwise (no choice yet,
+  // or the last choice was itself auto-applied) the freshly-measured tier is
+  // written silently — no click required — so a reload on an unmodified
+  // session always reflects the current machine's capability.
+  const sticky = getModeSource() === 'user';
+  if (!sticky) {
+    storeMode(probe.recommended, 'auto');
   }
+
+  // Highlight the tier that's actually active (the sticky user choice when
+  // one exists, otherwise the freshly-probed recommendation) — not always
+  // the probe's recommendation, which review #51 (finding 4) found could
+  // point at the wrong button once a sticky override was in effect.
+  btnStartFull.classList.remove('recommended');
+  btnStartBalanced.classList.remove('recommended');
+  btnStartLight.classList.remove('recommended');
+  const activeTier = sticky ? getStoredMode() || probe.recommended : probe.recommended;
+  const recommendedBtn = TIER_BUTTON[activeTier];
+  if (recommendedBtn) recommendedBtn.classList.add('recommended');
+
+  const tierLabel = TIER_LABEL[probe.recommended] || 'FULL';
+  syscheckStatus.textContent = sticky
+    ? `SYSTEM: ${tierLabel} recommended — your saved ${TIER_LABEL[getStoredMode()] || tierLabel} tier stays active ▸`
+    : `SYSTEM: ${tierLabel} — auto-applied, pick a tier below to override ▸`;
 }
 
 // ---------------------------------------------------------------------------
@@ -91,7 +125,7 @@ async function runProbeAndShowModes() {
 // ---------------------------------------------------------------------------
 
 const BOOT_LINES = [
-  { text: 'AETHER BIOS v3.2.0 — (C) SINAIDA SYSTEMS' },
+  { text: 'AETHER BIOS v3.7.0 — (C) SINAIDA SYSTEMS' },
   { memory: true },
   { text: 'AETHER SOUND DRIVER ........ OK' },
   { text: 'HAND TRACKING MODULE ....... OK' },
@@ -247,7 +281,10 @@ window.addEventListener('resize', () => {
 
 async function startWithMode(mode, audioContext) {
   pendingMode = mode;
-  storeMode(mode);
+  // An explicit start (whichever button the user clicked) is always a
+  // sticky user override — see the auto-apply comment in
+  // runProbeAndShowModes() above.
+  storeMode(mode, 'user');
   window.AC_MODE = mode;
 
   cameraError.style.display = 'none';
@@ -255,7 +292,9 @@ async function startWithMode(mode, audioContext) {
   const constraints =
     mode === 'light'
       ? { video: { width: 640, height: 480 } }
-      : { video: { width: 1280, height: 720 } };
+      : mode === 'balanced'
+        ? { video: { width: 960, height: 640 } }
+        : { video: { width: 1280, height: 720 } };
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -289,17 +328,20 @@ function startWithModeFromGesture(mode) {
 }
 
 btnStartFull.addEventListener('click', () => startWithModeFromGesture('full'));
+btnStartBalanced.addEventListener('click', () => startWithModeFromGesture('balanced'));
 btnStartLight.addEventListener('click', () => startWithModeFromGesture('light'));
 
 // "RUN TUTORIAL.EXE" — same synchronous-AudioContext start path as the mode
 // buttons (see startWithModeFromGesture comment above for why), just flagged
 // so __AC_BOOT launches the tutorial overlay once tracker/mapper exist.
-// No new gating: mirrors whichever mode button is currently enabled, full
-// by default (neither start button is ever actually .disabled today).
+// Respects the currently auto-applied/sticky tier (ac.mode) instead of
+// hardcoding FULL — the tutorial link bypasses mode-select entirely, so it
+// must not silently defeat the tier system for exactly the machines that
+// need it (review #51, finding 1).
 btnTutorial.addEventListener('click', (e) => {
   e.preventDefault();
   requestTutorial();
-  const mode = !btnStartFull.disabled ? 'full' : 'light';
+  const mode = getStoredMode() || 'full';
   startWithModeFromGesture(mode);
 });
 
@@ -524,12 +566,14 @@ const btnCopyCredit = document.getElementById('btn-copy-credit');
 const btnCloseExport = document.getElementById('btn-close-export');
 
 // ---------------------------------------------------------------------------
-// Task 4 — runtime perf watchdog: FULL mode under ~45fps sustained through
-// the first 15s after boot -> dismissible toast offering a LIGHT-mode switch.
-// FULL-mode-only, fires at most once per page-load session.
+// Task 4 — runtime perf watchdog: FULL/BALANCED mode under ~45fps sustained
+// through the first 15s after boot -> dismissible toast offering a step-down
+// to the next tier down (issue #48: full->balanced, balanced->light — not a
+// direct jump to light). Fires at most once per page-load session.
 // ---------------------------------------------------------------------------
 
 const perfToast = document.getElementById('perf-toast');
+const perfToastText = document.getElementById('perf-toast-text');
 const btnPerfSwitch = document.getElementById('btn-perf-switch');
 const btnPerfDismiss = document.getElementById('btn-perf-dismiss');
 
@@ -538,15 +582,26 @@ const PERF_WATCHDOG_SAMPLE_MS = 1000;
 const PERF_WATCHDOG_FPS_THRESHOLD = 45;
 const PERF_WATCHDOG_LOW_FRACTION = 0.6; // majority of samples must be under threshold
 let perfWatchdogFired = false;
+let perfWatchdogStepTarget = null; // tier the toast's switch button steps down to
 
-function showPerfToast() {
+function showPerfToast(currentMode) {
   if (perfWatchdogFired) return;
+  const nextTier = NEXT_TIER_DOWN[currentMode];
+  if (!nextTier) return; // already at the lowest tier — nothing to step down to
   perfWatchdogFired = true;
+  perfWatchdogStepTarget = nextTier;
+  perfToastText.textContent =
+    `${TIER_LABEL[currentMode]} MODE is running under 45fps. Switch to ${TIER_LABEL[nextTier]} mode for smoother tracking?`;
+  btnPerfSwitch.textContent = `▸ SWITCH TO ${TIER_LABEL[nextTier]}`;
   perfToast.style.display = 'block';
 }
 
 btnPerfSwitch.addEventListener('click', () => {
-  storeMode('light');
+  if (!perfWatchdogStepTarget) return;
+  // A watchdog-driven step-down is an explicit user action (the user clicked
+  // the switch button) and should stick — otherwise the next reload's
+  // auto-apply would just recommend the same tier that couldn't hold 45fps.
+  storeMode(perfWatchdogStepTarget, 'user');
   location.reload();
 });
 btnPerfDismiss.addEventListener('click', () => {
@@ -557,7 +612,7 @@ btnPerfDismiss.addEventListener('click', () => {
 // once per second for 15s. Triggers only on a sustained shortfall — both the
 // window average and a majority of individual samples must be under the
 // threshold — so a single slow-load stutter doesn't false-positive.
-function startPerfWatchdog(renderer) {
+function startPerfWatchdog(renderer, currentMode) {
   if (perfWatchdogFired) return;
   const samples = [];
   const startTime = performance.now();
@@ -569,13 +624,20 @@ function startPerfWatchdog(renderer) {
     const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
     const lowFraction = samples.filter((f) => f < PERF_WATCHDOG_FPS_THRESHOLD).length / samples.length;
     if (avg < PERF_WATCHDOG_FPS_THRESHOLD && lowFraction >= PERF_WATCHDOG_LOW_FRACTION) {
-      showPerfToast();
+      showPerfToast(currentMode);
     }
   }, PERF_WATCHDOG_SAMPLE_MS);
 }
 
-const CREDIT_LINE = 'Made with AETHER CURRENTS by Sinaida — sinaida.eu';
+const CREDIT_LINE = 'AETHER CURRENTS — Sinaida (design & development), Telefm (granular synthesis guidance) — sinaida.eu';
 const MIC_LABEL = '▸ RECORD MIC (4S)';
+
+// Keep the on-screen attribution line and the "COPY CREDIT LINE" clipboard
+// write byte-for-byte identical — the markup's static text is a matching
+// fallback only in case JS fails to run, never the source of truth (review
+// #51, finding 3).
+const creditLineEl = document.getElementById('credit-line');
+if (creditLineEl) creditLineEl.textContent = CREDIT_LINE;
 
 function progressBar(frac) {
   const pct = Math.round(Math.max(0, Math.min(1, frac)) * 100);
@@ -651,7 +713,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
 
   if (isTutorialRequested()) startTutorial({ tracker, perfBus });
 
-  if (mode === 'full') startPerfWatchdog(renderer);
+  if (mode !== 'light') startPerfWatchdog(renderer, mode);
 
   window.addEventListener('resize', () => renderer.resize());
 
@@ -1001,7 +1063,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     hudCanvas,
     audioNode: engine.output,
     audioContext,
-    modeLabel: mode === 'full' ? 'FULL MODE' : 'LIGHT MODE',
+    modeLabel: `${TIER_LABEL[mode] || 'FULL'} MODE`,
     onError: (msg) => {
       recordState.error = msg;
       recordState.errorUntil = performance.now() + 6000;

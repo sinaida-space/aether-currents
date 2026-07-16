@@ -102,10 +102,15 @@ async function runProbeAndShowModes() {
     storeMode(probe.recommended, 'auto');
   }
 
+  // Highlight the tier that's actually active (the sticky user choice when
+  // one exists, otherwise the freshly-probed recommendation) — not always
+  // the probe's recommendation, which review #51 (finding 4) found could
+  // point at the wrong button once a sticky override was in effect.
   btnStartFull.classList.remove('recommended');
   btnStartBalanced.classList.remove('recommended');
   btnStartLight.classList.remove('recommended');
-  const recommendedBtn = TIER_BUTTON[probe.recommended];
+  const activeTier = sticky ? getStoredMode() || probe.recommended : probe.recommended;
+  const recommendedBtn = TIER_BUTTON[activeTier];
   if (recommendedBtn) recommendedBtn.classList.add('recommended');
 
   const tierLabel = TIER_LABEL[probe.recommended] || 'FULL';
@@ -329,12 +334,14 @@ btnStartLight.addEventListener('click', () => startWithModeFromGesture('light'))
 // "RUN TUTORIAL.EXE" — same synchronous-AudioContext start path as the mode
 // buttons (see startWithModeFromGesture comment above for why), just flagged
 // so __AC_BOOT launches the tutorial overlay once tracker/mapper exist.
-// No new gating: mirrors whichever mode button is currently enabled, full
-// by default (neither start button is ever actually .disabled today).
+// Respects the currently auto-applied/sticky tier (ac.mode) instead of
+// hardcoding FULL — the tutorial link bypasses mode-select entirely, so it
+// must not silently defeat the tier system for exactly the machines that
+// need it (review #51, finding 1).
 btnTutorial.addEventListener('click', (e) => {
   e.preventDefault();
   requestTutorial();
-  const mode = !btnStartFull.disabled ? 'full' : 'light';
+  const mode = getStoredMode() || 'full';
   startWithModeFromGesture(mode);
 });
 
@@ -624,6 +631,13 @@ function startPerfWatchdog(renderer, currentMode) {
 
 const CREDIT_LINE = 'AETHER CURRENTS — Sinaida (design & development), Telefm (granular synthesis guidance) — sinaida.eu';
 const MIC_LABEL = '▸ RECORD MIC (4S)';
+
+// Keep the on-screen attribution line and the "COPY CREDIT LINE" clipboard
+// write byte-for-byte identical — the markup's static text is a matching
+// fallback only in case JS fails to run, never the source of truth (review
+// #51, finding 3).
+const creditLineEl = document.getElementById('credit-line');
+if (creditLineEl) creditLineEl.textContent = CREDIT_LINE;
 
 function progressBar(frac) {
   const pct = Math.round(Math.max(0, Math.min(1, frac)) * 100);

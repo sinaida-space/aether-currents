@@ -10,6 +10,7 @@ import { Mapper, SCALE_IDS, SCALE_LABELS, ROOT_KEYS } from './mapping.js';
 import { Recorder, downloadBlob } from './recorder.js';
 import { perfBus } from './midi/perf-bus.js';
 import { PerfRecorder } from './midi/perf-recorder.js';
+import { MidiLiveOut } from './midi/live-out.js';
 import { requestTutorial, isTutorialRequested, startTutorial } from './tutorial.js';
 
 const CONSENT_KEY = 'ac.consent';
@@ -428,6 +429,7 @@ const DECLUTTER_ITEMS = [
   { id: 'btn-beat', label: 'BEAT', essential: false },
   { id: 'btn-scale', label: 'SCALE/KEY', essential: false },
   { id: 'btn-medium', label: 'MEDIUM', essential: false },
+  { id: 'btn-midi', label: 'MIDI', essential: false },
 ];
 
 function loadDeclutterState() {
@@ -538,6 +540,7 @@ const btnBg = document.getElementById('btn-bg');
 const btnBeat = document.getElementById('btn-beat');
 const btnScale = document.getElementById('btn-scale');
 const btnMedium = document.getElementById('btn-medium');
+const btnMidi = document.getElementById('btn-midi');
 const mediumIntro = document.getElementById('medium-intro');
 const btnMediumOk = document.getElementById('btn-medium-ok');
 
@@ -896,6 +899,100 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
   });
   btnCloseSamples.addEventListener('click', closeSampleMenu);
 
+  // ---- MIDI OUT menu ------------------------------------------------------
+  // navigator.requestMIDIAccess is only ever triggered from here — the first
+  // time the user opens this panel — never on page load, per product
+  // decision (no surprise permission dialogs).
+
+  const MIDI_KEY = 'ac.midiOut';
+  const midiMenu = document.getElementById('midi-menu');
+  const midiPortList = document.getElementById('midi-port-list');
+  const midiUnsupported = document.getElementById('midi-unsupported');
+  const btnCloseMidi = document.getElementById('btn-close-midi');
+
+  const liveOut = new MidiLiveOut();
+  liveOut.onDisconnect = () => {
+    updateMidiButton();
+    if (midiMenu.style.display !== 'none') renderMidiPortList([]);
+  };
+
+  function getStoredMidiName() {
+    return localStorage.getItem(MIDI_KEY) || null;
+  }
+
+  function updateMidiButton() {
+    btnMidi.textContent = liveOut.active ? '▪ MIDI' : '▸ MIDI';
+  }
+
+  function renderMidiPortList(ports) {
+    midiPortList.innerHTML = '';
+
+    const offLi = document.createElement('li');
+    offLi.textContent = liveOut.active ? '  OFF' : '▪ OFF';
+    offLi.addEventListener('click', () => {
+      liveOut.disconnect();
+      updateMidiButton();
+      renderMidiPortList(ports);
+    });
+    midiPortList.appendChild(offLi);
+
+    for (const port of ports) {
+      const li = document.createElement('li');
+      const isActive = liveOut.active && liveOut.active.id === port.id;
+      li.textContent = (isActive ? '▪ ' : '  ') + port.name;
+      li.addEventListener('click', async () => {
+        const ok = await liveOut.connect(port.id);
+        if (ok) localStorage.setItem(MIDI_KEY, port.name);
+        updateMidiButton();
+        renderMidiPortList(ports);
+      });
+      midiPortList.appendChild(li);
+    }
+  }
+
+  async function openMidiMenu() {
+    midiMenu.style.display = 'block';
+    if (!liveOut.supported) {
+      midiUnsupported.style.display = 'block';
+      midiPortList.style.display = 'none';
+      return;
+    }
+    midiUnsupported.style.display = 'none';
+    midiPortList.style.display = '';
+    const ports = await liveOut.listPorts();
+    renderMidiPortList(ports);
+
+    // Pre-select the remembered port by name, if present and not already
+    // connected — reconnect is manual, this just saves a click.
+    if (!liveOut.active) {
+      const rememberedName = getStoredMidiName();
+      const match = rememberedName && ports.find((p) => p.name === rememberedName);
+      if (match) {
+        const ok = await liveOut.connect(match.id);
+        if (ok) {
+          updateMidiButton();
+          renderMidiPortList(ports);
+        }
+      }
+    }
+  }
+
+  function closeMidiMenu() {
+    midiMenu.style.display = 'none';
+  }
+
+  btnMidi.addEventListener('click', () => {
+    if (midiMenu.style.display === 'none') openMidiMenu();
+    else closeMidiMenu();
+  });
+  btnCloseMidi.addEventListener('click', closeMidiMenu);
+  updateMidiButton();
+
+  // Debug-only hook (localhost dev, per DoD check) — never exposed in prod.
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+    window.__acMidi = { bus: perfBus, liveOut };
+  }
+
   // Mic-only sampling (no file upload — see licensing note in the sample
   // menu): capture, then always review with playback before it's added to
   // the library, so there's no "what did I just record?" black box.
@@ -968,6 +1065,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     }
     if (e.key === 'Escape') {
       if (sampleMenu.style.display !== 'none') closeSampleMenu();
+      if (midiMenu.style.display !== 'none') closeMidiMenu();
       if (recordExport.style.display !== 'none') recordExport.style.display = 'none';
       if (mediumIntro.style.display !== 'none') mediumIntro.style.display = 'none';
       return;
@@ -1000,6 +1098,10 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     }
     if (e.key === 'k' || e.key === 'K') {
       cycleRootKey();
+    }
+    if (e.key === 'm' || e.key === 'M') {
+      if (midiMenu.style.display === 'none') openMidiMenu();
+      else closeMidiMenu();
     }
   });
 

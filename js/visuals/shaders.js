@@ -235,6 +235,8 @@ uniform float uTime;
 uniform float uCentroid;
 uniform float uLevel;
 uniform float uFrozen;
+uniform vec3  uNoteColor;     // Scriabin synesthesia color for the active note (issue #49)
+uniform float uNoteMix;       // 0 = centroid-driven hue (no note sounding yet), 1 = note-driven
 uniform float uAberr;
 uniform float uVignette;
 uniform vec2  uRes;
@@ -248,6 +250,14 @@ vec3 hsv2rgb(vec3 c){
   vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
   vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
   return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+vec3 rgb2hsv(vec3 c){
+  vec4 K = vec4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
+  vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+  vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+  float d = q.x - min(q.w, q.y);
+  float e = 1.0e-10;
+  return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
 }
 float hash21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float hash1(float p){ return fract(sin(p * 127.1) * 43758.5453); }
@@ -425,11 +435,20 @@ void main(){
   // still keeps empty space dark while letting real signal read as glow.
   float lum = 1.0 - exp(-max(raw, 0.0) * 3.2);
 
-  // centroid drives hue: red (1.0) -> magenta -> cyan (0.5)
-  float hue = fract(1.0 - uCentroid * 0.5);
+  // Scriabin note color is the dominant hue (issue #49); centroid drives hue
+  // only as the pre-first-note fallback (uNoteMix fades 0->1 the first time a
+  // note sounds and stays there — no black flash, just a gentle handoff).
+  // Centroid + level keep doing what they did before: modulating brightness
+  // and saturation, now "around" the note color instead of choosing the hue.
+  float centroidHue = fract(1.0 - uCentroid * 0.5);
+  vec3 noteHsv = rgb2hsv(clamp(uNoteColor, 0.0, 1.0));
+  float hue = mix(centroidHue, noteHsv.x, uNoteMix);
   float val = pow(lum, 0.7) * (1.05 + 1.2 * uLevel);
-  // brightest cores desaturate toward white (glow), mids keep the palette hue
-  float sat = clamp(0.9 + 0.1 * uLevel - lum * 0.7, 0.0, 1.0);
+  // brightest cores desaturate toward white (glow), mids keep the palette hue;
+  // the note's own saturation (e.g. D#'s "glint of steel" is nearly grey)
+  // still shows through so all 12 colors stay visually distinct.
+  float baseSat = mix(0.9, noteHsv.y, uNoteMix);
+  float sat = clamp(baseSat + 0.1 * uLevel - lum * 0.7, 0.0, 1.0);
   vec3 col = hsv2rgb(vec3(hue, sat, val));
 
   // frozen -> icy cyan-white

@@ -7,8 +7,8 @@ import { perfBus } from './midi/perf-bus.js';
 import { Field } from './medium/field.js';
 
 const EPS = 1e-3;
-const TAU = 0.04; // was 0.05 — trimmed for latency (task 5); still glitch-safe
-const TAU_POSITION = 0.06; // was 0.08 — trimmed for latency; playhead motion stays audibly smooth
+const TAU = 0.03; // was 0.04 (task 5), 0.05 originally — trimmed again (issue #48) for tighter hand-following; still glitch-safe
+const TAU_POSITION = 0.04; // was 0.06 (task 5), 0.08 originally — trimmed again (issue #48); playhead motion stays audibly smooth
 // Pitch portamento: quantized-band changes should feel like a note attack, not
 // a glide, so they get a much shorter time constant. Octave-shift transitions
 // (same band, different octave) keep the old gooey tau since a bare semitone
@@ -36,6 +36,24 @@ export const SCALE_LABELS = {
 // Chromatic root names, C=0 .. B=11 (standard pitch-class order).
 export const ROOT_KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const DEFAULT_ROOT_INDEX = 9; // 'A' — matches the original hardcoded A minor pentatonic exactly.
+
+// Scriabin synesthesia note->color mapping (issue #49), indexed by chromatic
+// index 0-11 (C=0), same order as ROOT_KEYS. Canonical Scriabin hues; used by
+// the renderer (GRADE shader tint) and the HUD (active note-name label).
+export const SCRIABIN_COLORS = [
+  '#FF0000', // C  red
+  '#8F00FF', // C# violet
+  '#FFFF00', // D  yellow
+  '#7E7EB8', // D# glint of steel
+  '#AFEBFF', // E  pearly moonlit
+  '#B00000', // F  deep red
+  '#00CCFF', // F# bright azure
+  '#FF7F00', // G  orange
+  '#BF00BF', // G# purple-violet
+  '#33CC33', // A  green
+  '#B8859E', // A# rosy steel
+  '#99CCFF', // B  pearly blue
+];
 
 const OCTAVE_COOLDOWN_MS = 600;
 const CHORD_ARP_HOLD_MS = 300; // left-hand 3-finger hold to flip chord<->arp
@@ -431,6 +449,13 @@ export class Mapper {
       scaleLabel: SCALE_LABELS[this._scaleId],
       rootKeyName: ROOT_KEYS[this._rootKeyIndex],
       noteNames: this._noteNames(),
+      // Active chromatic index (0-11, C=0) for the Scriabin color mapping
+      // (issue #49) — null until the right hand has sounded a note at least
+      // once (matches the HUD's existing pitchBand persistence: octave shift
+      // doesn't change pitch class, so it's excluded here).
+      noteIndex: this._pitchBand != null
+        ? (((this._rootKeyIndex + SCALE_DEFS[this._scaleId][this._pitchBand]) % 12) + 12) % 12
+        : null,
       chordOn: gestures.chordOn,
       chordArp: this._chordArp,
       beatOn: this.engine.beatOn,
@@ -444,7 +469,8 @@ export class Mapper {
       },
       frozen: this._frozen,
       burstCount: gestures.burstCount,
-      modeLabel: this.mode === 'full' ? 'FULL MODE' : 'LIGHT MODE',
+      modeLabel:
+        this.mode === 'full' ? 'FULL MODE' : this.mode === 'balanced' ? 'BALANCED MODE' : 'LIGHT MODE',
       sampleName: this.sampleName,
       recording: this.recording,
       recordMs: this.recording && this.recordStartedAt ? performance.now() - this.recordStartedAt : 0,

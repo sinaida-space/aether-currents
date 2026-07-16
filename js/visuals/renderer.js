@@ -15,9 +15,14 @@ import {
 import { Hud } from './hud.js';
 
 const MODES = {
-  full:  { simSize: 256, dprCap: 2, renderScale: 1.0, bloomIter: 2 },
-  light: { simSize: 128, dprCap: 1, renderScale: 0.5, bloomIter: 1 },
+  full:     { simSize: 256, dprCap: 2,   renderScale: 1.0,  bloomIter: 2 },
+  balanced: { simSize: 192, dprCap: 1.5, renderScale: 0.75, bloomIter: 1 },
+  light:    { simSize: 128, dprCap: 1,   renderScale: 0.5,  bloomIter: 1 },
 };
+
+function normalizeMode(mode) {
+  return mode === 'light' || mode === 'balanced' ? mode : 'full';
+}
 
 // found-footage glitch event types
 const G_DATAMOSH = 1, G_ASCII = 2, G_BLEED = 3, G_WOBBLE = 4;
@@ -46,7 +51,7 @@ function program(gl, vsSrc, fsSrc) {
 export class Renderer {
   constructor(glCanvas, hudCanvas, opts = {}) {
     this.glCanvas = glCanvas;
-    this.mode = opts.mode === 'light' ? 'light' : 'full';
+    this.mode = normalizeMode(opts.mode);
     this.cfg = MODES[this.mode];
     this.video = opts.video || null;
     this.debug = !!opts.debug;
@@ -810,7 +815,7 @@ export class Renderer {
   // re-derives screen-space targets; safe to call only while the context is
   // alive (contextLost guards the caller in main.js).
   setMode(mode) {
-    const next = mode === 'light' ? 'light' : 'full';
+    const next = normalizeMode(mode);
     if (next === this.mode || this.contextLost) return;
     this.mode = next;
     this.cfg = MODES[next];

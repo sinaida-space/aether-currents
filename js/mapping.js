@@ -7,8 +7,8 @@ import { perfBus } from './midi/perf-bus.js';
 import { Field } from './medium/field.js';
 
 const EPS = 1e-3;
-const TAU = 0.04; // was 0.05 — trimmed for latency (task 5); still glitch-safe
-const TAU_POSITION = 0.06; // was 0.08 — trimmed for latency; playhead motion stays audibly smooth
+const TAU = 0.03; // was 0.04 (task 5), 0.05 originally — trimmed again (issue #48) for tighter hand-following; still glitch-safe
+const TAU_POSITION = 0.04; // was 0.06 (task 5), 0.08 originally — trimmed again (issue #48); playhead motion stays audibly smooth
 // Pitch portamento: quantized-band changes should feel like a note attack, not
 // a glide, so they get a much shorter time constant. Octave-shift transitions
 // (same band, different octave) keep the old gooey tau since a bare semitone
@@ -444,7 +444,8 @@ export class Mapper {
       },
       frozen: this._frozen,
       burstCount: gestures.burstCount,
-      modeLabel: this.mode === 'full' ? 'FULL MODE' : 'LIGHT MODE',
+      modeLabel:
+        this.mode === 'full' ? 'FULL MODE' : this.mode === 'balanced' ? 'BALANCED MODE' : 'LIGHT MODE',
       sampleName: this.sampleName,
       recording: this.recording,
       recordMs: this.recording && this.recordStartedAt ? performance.now() - this.recordStartedAt : 0,

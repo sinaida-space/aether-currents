@@ -3,6 +3,7 @@
 // Everything the recording needs is painted here (no HTML overlays).
 
 import { VERSION } from '../version.js';
+import { SCRIABIN_COLORS } from '../mapping.js';
 
 const WHITE = '#f2f2f2';
 const RED = '#ff2a2a';
@@ -300,6 +301,9 @@ export class Hud {
     const band = s.pitchBand;
     const noteNames = (s.noteNames && s.noteNames.length === BAND_COUNT) ? s.noteNames : DEFAULT_NOTE_NAMES;
     const pendingBand = s.pendingPitchBand != null ? s.pendingPitchBand : null;
+    // Scriabin color (issue #49) for the sounding note's label, when known.
+    const activeNoteColor = (s.noteIndex != null && s.noteIndex >= 0 && s.noteIndex < 12)
+      ? SCRIABIN_COLORS[s.noteIndex] : RED;
 
     ctx.save();
     ctx.shadowBlur = 0;
@@ -309,7 +313,7 @@ export class Hud {
       const y = top + centerFrac * span;
       const active = b === band;
       const pending = pendingBand != null && b === pendingBand;
-      ctx.strokeStyle = active ? RED : GESTURE_NORMAL;
+      ctx.strokeStyle = active ? activeNoteColor : GESTURE_NORMAL;
       ctx.lineWidth = active ? 2 * dpr : 1 * dpr;
       ctx.beginPath();
       ctx.moveTo(lineX0, y);
@@ -331,7 +335,7 @@ export class Hud {
       const noteFontPx = Math.max(11, Math.round(13 * dpr));
       ctx.font = `${noteFontPx}px "VT323", "Courier New", monospace`;
       ctx.textAlign = 'left';
-      ctx.fillStyle = active ? RED : pending ? 'rgba(0,229,255,0.75)' : DIM;
+      ctx.fillStyle = active ? activeNoteColor : pending ? 'rgba(0,229,255,0.75)' : DIM;
       ctx.fillText(noteNames[b], lineX1 - Math.round(20 * dpr), y - noteFontPx / 2);
     }
 

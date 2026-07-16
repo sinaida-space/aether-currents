@@ -13,6 +13,14 @@ import {
   FEEDBACK_FS, THRESHOLD_FS, BLUR_FS, GRADE_FS, COPY_FS,
 } from './shaders.js';
 import { Hud } from './hud.js';
+import { SCRIABIN_COLORS } from '../mapping.js';
+
+// '#RRGGBB' -> [r,g,b] normalized 0..1, for the uNoteColor uniform (issue #49).
+function hexToRgb01(hex) {
+  const v = parseInt(hex.slice(1), 16);
+  return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];
+}
+const NOTE_COLORS_RGB = SCRIABIN_COLORS.map(hexToRgb01);
 
 const MODES = {
   full:     { simSize: 256, dprCap: 2,   renderScale: 1.0,  bloomIter: 2 },
@@ -124,6 +132,14 @@ export class Renderer {
     this._burstTimer = 0;
     this._burstFlash = 0;
 
+    // Scriabin note-color state (issue #49) — smoothed over ~100ms so band
+    // changes/glides never flicker. uNoteMix ramps 0->1 the first time a note
+    // sounds and then stays there (no black flash, per spec).
+    this._noteColorTarget = NOTE_COLORS_RGB[0];
+    this._noteColor = new Float32Array(NOTE_COLORS_RGB[0]);
+    this._noteMixTarget = 0;
+    this._noteMix = 0;
+
     // fps (EMA of true frame interval)
     this.fps = 0;
     this._fpsEMA = 0;
@@ -185,7 +201,8 @@ export class Renderer {
       blur: this._locs(this.pBlur, ['uTex', 'uDir']),
       grade: this._locs(this.pGrade, ['uFeedback', 'uBloom', 'uCam', 'uPrevCam', 'uGlyphAtlas',
         'uCamOn', 'uCamRes', 'uTime', 'uCentroid', 'uLevel', 'uFrozen', 'uAberr', 'uVignette',
-        'uRes', 'uGlyphCount', 'uGlitchType', 'uGlitchProg', 'uGlitchSeed', 'uMotion']),
+        'uRes', 'uGlyphCount', 'uGlitchType', 'uGlitchProg', 'uGlitchSeed', 'uMotion',
+        'uNoteColor', 'uNoteMix']),
       copy: this._locs(this.pCopy, ['uTex']),
     };
 
@@ -535,6 +552,15 @@ export class Renderer {
 
     this._level = Math.max(0, Math.min(1, audio.level || 0));
     this._centroid = Math.max(0, Math.min(1, audio.centroid || 0));
+
+    // Scriabin note color target (issue #49) — smoothed toward in frame().
+    const noteIndex = state && state.noteIndex;
+    if (noteIndex != null && noteIndex >= 0 && noteIndex < 12) {
+      this._noteColorTarget = NOTE_COLORS_RGB[noteIndex];
+      this._noteMixTarget = 1;
+    } else {
+      this._noteMixTarget = 0; // no note sounded yet -> centroid-driven fallback
+    }
     this._grainSize = (state && state.params && state.params.grainSize != null)
       ? state.params.grainSize : 0.05;
 
@@ -771,6 +797,16 @@ export class Renderer {
     gl.uniform1f(ug.uCentroid, this._centroid);
     gl.uniform1f(ug.uLevel, this._level);
     gl.uniform1f(ug.uFrozen, this._frozen ? 1 : 0);
+    // Scriabin note color (issue #49): ~100ms one-pole toward the target hue
+    // and mix, so band changes/glides read as a smooth color shift, not a cut.
+    const noteEase = 1 - Math.exp(-dt / 0.1);
+    const nt = this._noteColorTarget;
+    this._noteColor[0] += (nt[0] - this._noteColor[0]) * noteEase;
+    this._noteColor[1] += (nt[1] - this._noteColor[1]) * noteEase;
+    this._noteColor[2] += (nt[2] - this._noteColor[2]) * noteEase;
+    this._noteMix += (this._noteMixTarget - this._noteMix) * noteEase;
+    gl.uniform3fv(ug.uNoteColor, this._noteColor);
+    gl.uniform1f(ug.uNoteMix, this._noteMix);
     gl.uniform1f(ug.uAberr, this._level * 0.5 + this._burstFlash * 1.5);
     gl.uniform1f(ug.uVignette, 0.85);
     gl.uniform2f(ug.uRes, this.glCanvas.width, this.glCanvas.height);

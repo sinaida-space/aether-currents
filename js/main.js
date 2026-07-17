@@ -419,6 +419,11 @@ btnHome.addEventListener('click', () => {
 
 const DECLUTTER_KEY = 'ac.declutter';
 
+// Web MIDI (navigator.requestMIDIAccess) doesn't exist in Safari or Firefox
+// — checked once here so the MIDI button/panel/shortcut never surface where
+// they can't work, instead of surfacing and then showing an error.
+const MIDI_SUPPORTED = typeof navigator !== 'undefined' && !!navigator.requestMIDIAccess;
+
 // id -> { label, essential }. essential = kept visible by the MINIMAL preset.
 const DECLUTTER_ITEMS = [
   { id: 'btn-home', label: 'MAIN SCREEN', essential: true },
@@ -429,7 +434,7 @@ const DECLUTTER_ITEMS = [
   { id: 'btn-beat', label: 'BEAT', essential: false },
   { id: 'btn-scale', label: 'SCALE/KEY', essential: false },
   { id: 'btn-medium', label: 'MEDIUM', essential: false },
-  { id: 'btn-midi', label: 'MIDI', essential: false },
+  ...(MIDI_SUPPORTED ? [{ id: 'btn-midi', label: 'MIDI', essential: false }] : []),
 ];
 
 function loadDeclutterState() {
@@ -541,6 +546,7 @@ const btnBeat = document.getElementById('btn-beat');
 const btnScale = document.getElementById('btn-scale');
 const btnMedium = document.getElementById('btn-medium');
 const btnMidi = document.getElementById('btn-midi');
+if (!MIDI_SUPPORTED) btnMidi.style.display = 'none';
 const mediumIntro = document.getElementById('medium-intro');
 const btnMediumOk = document.getElementById('btn-medium-ok');
 
@@ -1105,7 +1111,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     if (e.key === 'k' || e.key === 'K') {
       cycleRootKey();
     }
-    if (e.key === 'm' || e.key === 'M') {
+    if (MIDI_SUPPORTED && (e.key === 'm' || e.key === 'M')) {
       if (midiMenu.style.display === 'none') openMidiMenu();
       else closeMidiMenu();
     }

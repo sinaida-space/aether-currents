@@ -1,5 +1,13 @@
 # Live MIDI Out
 
+> **Chromium only.** Live MIDI out requires the [Web MIDI API](https://developer.mozilla.org/en-US/docs/Web/API/Web_MIDI_API)
+> (`navigator.requestMIDIAccess`), which Chrome, Edge, Brave, Opera, and
+> Firefox 108+ support — **Safari (macOS and iOS) does not implement it at
+> all**, with no toggle to enable it. This is a WebKit limitation, not
+> something fixable from the app. The `▸ MIDI` button is hidden automatically
+> on unsupported browsers. Safari users can still get every gesture/beat
+> event as a `.mid` file via `▸ SAVE MIDI` after a recording — see below.
+
 Aether Currents can stream gesture and beat events as real-time MIDI to any
 Web MIDI output port, turning the instrument into a live controller for a
 DAW (Ableton, TouchDesigner, hardware synths/drum racks). Open the panel

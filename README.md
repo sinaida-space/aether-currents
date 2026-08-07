@@ -15,8 +15,8 @@ feedback that shaped the instrument's gesture language.
 
 ## Artists
 
-- **Sinaida** — new media artist, Prague — [sinaida.eu](https://sinaida.eu) — concept, design, engineering
-- **Telefm** (Belgrade) — [telefm.bandcamp.com](https://telefm.bandcamp.com/) — granular synth design, usage feedback
+- **Sinaida** — new media artist, Prague — [sinaida.eu](https://sinaida.eu) — concept, design, engineering.
+- **Telefm** (Belgrade) — [telefm.bandcamp.com](https://telefm.bandcamp.com/) — granular synth design, usage feedback.
 
 ## Quality tiers
 

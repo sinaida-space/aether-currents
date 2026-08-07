@@ -97,7 +97,12 @@ See [legal/privacy.html](legal/privacy.html).
 
 ## License
 
-Code: MIT. Output licensing (recordings you make with the tool) is covered
-separately — see [legal/license.html](legal/license.html).
+Code: AGPL 3.0, see [LICENSE](LICENSE) and [NOTICE](NOTICE). Free to use,
+study, modify and share. Run a modified version, including as a hosted
+service, and you publish your source under the same terms. Commercial
+licenses on other terms: [sinaida.eu/collaborate](https://sinaida.eu/collaborate).
+Recordings you make with the tool: CC BY 4.0 with mandatory attribution,
+see [LICENSE-CONTENT](LICENSE-CONTENT) and [legal/license.html](legal/license.html).
+Third-party code: [THIRD-PARTY.md](THIRD-PARTY.md).
 
 Made by Sinaida — [sinaida.eu](https://sinaida.eu)

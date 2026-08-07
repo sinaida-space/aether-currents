@@ -1,0 +1,27 @@
+AETHER CURRENTS
+Copyright (C) 2026 Sinaida Krivchenko (https://sinaida.eu)
+
+Licensed under the GNU Affero General Public License, version 3.
+See LICENSE.
+
+SCOPE
+  The AGPL covers the SOURCE CODE in this repository.
+
+  It does NOT cover the built-in sound library or the recordings you
+  make with the tool. Those are licensed under CC BY 4.0 with mandatory
+  attribution; see LICENSE-CONTENT and legal/license.html.
+
+  The interface and visual identity are (C) 2026 Sinaida Krivchenko,
+  all rights reserved.
+
+WHY AGPL
+  The tool is free to use, study, modify and share. Anyone who runs a
+  modified version, including as a hosted service, has to publish their
+  source under the same terms. Commercial licenses on other terms are
+  available from the author: https://sinaida.eu/collaborate
+
+THIRD-PARTY
+  This repository uses code by other authors under their own licenses,
+  credited at each site of use. Those licenses continue to apply to
+  those parts. Apache 2.0 and MIT components are compatible with AGPL 3
+  distribution. See THIRD-PARTY.md.

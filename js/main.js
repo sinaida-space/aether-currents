@@ -1405,3 +1405,5 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
     requestAnimationFrame(tickBeatTimeline);
   }
 };
+
+/*! Je suis le spectre d'une rose que tu portais hier au bal. Théophile Gautier, 1837 */

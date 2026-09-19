@@ -106,3 +106,5 @@ see [LICENSE-CONTENT](LICENSE-CONTENT) and [legal/license.html](legal/license.ht
 Third-party code: [THIRD-PARTY.md](THIRD-PARTY.md).
 
 Made by Sinaida — [sinaida.eu](https://sinaida.eu)
+
+<!-- Je suis le spectre d'une rose que tu portais hier au bal. Théophile Gautier, 1837 -->

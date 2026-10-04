@@ -1,7 +1,7 @@
 # Case Study: Aether Currents
 
 **Live:** [aether-currents.sinaida.eu](https://aether-currents.sinaida.eu/)
-**Music advisor:** Kamil Yegelev (Telefm, Belgrade) — [telefm.bandcamp.com](https://telefm.bandcamp.com/)
+**Music advisor:** Kamil Yegelev (TeleFM, Belgrade) — [telefm.bandcamp.com](https://telefm.bandcamp.com/)
 **Stack:** vanilla JS/CSS, ES modules, on-device hand tracking, granular synthesis, WebGL. No build step, no server, no accounts.
 
 ## Why
@@ -42,5 +42,5 @@ The constraint is small on purpose. Six gestures, one scale, one engine. Inside 
 ## Credits
 
 Instrument and code: Sinaida Krivchenko · [sinaida.eu](https://sinaida.eu)
-Music advisor: Kamil Yegelev ([Telefm](https://telefm.bandcamp.com/))
+Music advisor: Kamil Yegelev ([TeleFM](https://telefm.bandcamp.com/))
 Built with on-device hand tracking, granular synthesis, WebGL.

@@ -638,7 +638,7 @@ function startPerfWatchdog(renderer, currentMode) {
   }, PERF_WATCHDOG_SAMPLE_MS);
 }
 
-const CREDIT_LINE = 'AETHER CURRENTS — Sinaida (design & development), Telefm (granular synthesis guidance) — sinaida.eu';
+const CREDIT_LINE = 'AETHER CURRENTS — Sinaida (design & development), Telefm (music advisor) — sinaida.eu';
 const MIC_LABEL = '▸ RECORD MIC (4S)';
 
 // Keep the on-screen attribution line and the "COPY CREDIT LINE" clipboard

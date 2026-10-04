@@ -10,13 +10,13 @@ Static site, no build step, no framework — vanilla JS/CSS with ES modules.
 
 Developed by Sinaida, a new media artist currently based in Prague, working
 in interactive projection, TouchDesigner, GLSL and generative AI. Kamil Yegelev
-(Telefm, Belgrade) is the music advisor; his hands-on feedback shaped the
+(TeleFM, Belgrade) is the music advisor; his hands-on feedback shaped the
 instrument's sound and gesture language.
 
 ## Artists
 
 - **Sinaida** — new media artist, Prague — [sinaida.eu](https://sinaida.eu) — concept, design, engineering.
-- **Kamil Yegelev (Telefm)** (Belgrade) — [telefm.bandcamp.com](https://telefm.bandcamp.com/) — music advisor.
+- **Kamil Yegelev (TeleFM)** (Belgrade) — [telefm.bandcamp.com](https://telefm.bandcamp.com/) — music advisor.
 
 ## Quality tiers
 

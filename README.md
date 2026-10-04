@@ -9,14 +9,14 @@ tracking drives granular audio synthesis and a real-time visual layer.
 Static site, no build step, no framework — vanilla JS/CSS with ES modules.
 
 Developed by Sinaida, a new media artist currently based in Prague, working
-in interactive projection, TouchDesigner, GLSL and generative AI. Telefm
-(Belgrade) contributed the granular synthesis design and hands-on usage
-feedback that shaped the instrument's gesture language.
+in interactive projection, TouchDesigner, GLSL and generative AI. Kamil Yegelev
+(Telefm, Belgrade) is the music advisor; his hands-on feedback shaped the
+instrument's sound and gesture language.
 
 ## Artists
 
 - **Sinaida** — new media artist, Prague — [sinaida.eu](https://sinaida.eu) — concept, design, engineering.
-- **Telefm** (Belgrade) — [telefm.bandcamp.com](https://telefm.bandcamp.com/) — granular synth design, usage feedback.
+- **Kamil Yegelev (Telefm)** (Belgrade) — [telefm.bandcamp.com](https://telefm.bandcamp.com/) — music advisor.
 
 ## Quality tiers
 

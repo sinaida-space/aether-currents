@@ -12,7 +12,7 @@ Two things usually kill that in browser instruments, and both were design target
 
 ## How
 
-Sinaida engineered it as a single signal path. On-device hand tracking reads gesture at up to 40Hz and drives a granular synthesis engine directly:
+Sinaida designed it as a single signal path. On-device hand tracking reads gesture at up to 40Hz and drives a granular synthesis engine directly:
 
 ```
 RIGHT HAND x/y ... playhead position / pitch
@@ -31,7 +31,7 @@ Nothing leaves the device. No camera frame, no audio, no account. The privacy mo
 
 Version 3.2 removed file upload entirely, added a mic-review flow so a recording can be checked before it is kept, put BPM control directly in the UI, and added a two-hand gesture for chords and arpeggios. Each of those came from watching people actually try to play the thing and fail in a specific way. The interface should not need instructions, and every place it still does is a note for the next version.
 
-The current cycle, documented in PRD v3.3 "PLAYABLE," targets performance and experience optimization. A GPU context loss should not turn the screen permanently black. A recording should never silently fail and leave a stuck button with no file to show for it. And the motion-to-sound gap — measured, not guessed — needs to come under 100 milliseconds. None of this is visible when it works. All of it is instantly visible when it does not. That asymmetry is the whole difficulty of building something meant to feel like an instrument instead of a piece of software.
+The current cycle, v3.3 "PLAYABLE," targets performance and experience optimization. A GPU context loss should not turn the screen permanently black. A recording should never silently fail and leave a stuck button with no file to show for it. And the motion-to-sound gap — measured, not guessed — needs to come under 100 milliseconds. None of this is visible when it works. All of it is instantly visible when it does not. That asymmetry is the whole difficulty of building something meant to feel like an instrument instead of a piece of software.
 
 ## Why hands, and not a controller
 

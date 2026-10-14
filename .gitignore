@@ -1,2 +1,5 @@
 .DS_Store
 .claude/
+
+# planning docs live in the private studio repo
+docs/PRD*.md

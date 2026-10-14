@@ -8,8 +8,9 @@ Conduct sound with your hands. A browser-based instrument: on-device hand
 tracking drives granular audio synthesis and a real-time visual layer.
 Static site, no build step, no framework — vanilla JS/CSS with ES modules.
 
-Developed by Sinaida, a new media artist currently based in Prague, working
-in interactive projection, TouchDesigner, GLSL and generative AI. Kamil Yegelev
+Designed and directed by Sinaida, a new media artist based in Prague: concept,
+interaction and sound design, the system specification and testing with players.
+Built with AI coding agents under her direction. Kamil Yegelev
 (TeleFM, Belgrade) is the music advisor; his hands-on feedback shaped the
 instrument's sound and gesture language.
 

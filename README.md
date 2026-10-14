@@ -2,8 +2,6 @@
 
 ![AETHER CURRENTS](gh_ac_cover.png)
 
-> Production mirror. Development and issue tracking run in a private development environment; releases are published here.
-
 **▸ [LIVE — full experience](https://sinaida-space.github.io/aether-currents/)**
 
 Conduct sound with your hands. A browser-based instrument: on-device hand
@@ -109,5 +107,9 @@ see [LICENSE-CONTENT](LICENSE-CONTENT) and [legal/license.html](legal/license.ht
 Third-party code: [THIRD-PARTY.md](THIRD-PARTY.md).
 
 Made by Sinaida — [sinaida.eu](https://sinaida.eu)
+
+This repo is a production mirror.
+
+Development and issue tracking run in a private development environment; releases are published here.
 
 <!-- Je suis le spectre d'une rose que tu portais hier au bal. Théophile Gautier, 1837 -->

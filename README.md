@@ -2,6 +2,8 @@
 
 ![AETHER CURRENTS](gh_ac_cover.png)
 
+> Production mirror. Development and issue tracking run in a private development environment; releases are published here.
+
 **▸ [LIVE — full experience](https://sinaida-space.github.io/aether-currents/)**
 
 Conduct sound with your hands. A browser-based instrument: on-device hand

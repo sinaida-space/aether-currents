@@ -10,14 +10,14 @@ Static site, no build step, no framework — vanilla JS/CSS with ES modules.
 
 Designed and directed by Sinaida, a new media artist based in Prague: concept,
 interaction and sound design, the system specification and testing with players.
-Built with AI coding agents under her direction. Kamil Yegelev
+Built with agentic tools under her direction. Kamil Yegelev
 (TeleFM, Belgrade) is the music advisor; his hands-on feedback shaped the
 instrument's sound and gesture language.
 
 ## Artists
 
 - **Sinaida** — new media artist, Prague — [sinaida.eu](https://sinaida.eu) — idea, concept and interactive design.
-- **Kamil Yegelev (TeleFM)** (Belgrade) — [telefm.bandcamp.com](https://telefm.bandcamp.com/) — music advisor.
+- Music advisor: **Kamil Yegelev (TeleFM)**, Belgrade — [telefm.bandcamp.com](https://telefm.bandcamp.com/).
 
 ## Quality tiers
 
@@ -95,6 +95,19 @@ legal/                  privacy, terms, license
 
 No cookies, no analytics, no server. Camera is processed entirely on-device.
 See [legal/privacy.html](legal/privacy.html).
+
+## Support & handoff
+
+- Status: active (maintained by Sinaida Krivchenko)
+- Run locally: `python3 -m http.server 8123`, then open http://localhost:8123 (no build step)
+- Performance tiers: auto-detected on load as FULL, BALANCED or LIGHT, with a manual override; a perf watchdog steps down one tier at a time when frame time degrades
+- Requirements: a webcam for on-device hand tracking; MIDI out needs a Chromium-based browser (see docs/midi.md)
+- Handing over: docs live in docs/ (midi.md, sound-research.md, case-study.md, artist-statement.md); licence terms are in LICENSE, LICENSE-CONTENT and NOTICE
+- Contact: https://sinaida.eu/collaborate
+
+## How this was made
+
+Sinaida comes up with the idea, the concept and the way to make it into a system. The making uses whatever the piece needs, from drawing by hand to AI-native production. She cares about integrity and a smooth experience, so every work adjusts to its environment, and each project ships with a rider, a contingency plan and her support.
 
 ## License
 

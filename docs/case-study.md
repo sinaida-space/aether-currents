@@ -1,6 +1,7 @@
 # Case Study: Aether Currents
 
 **Live:** [aether-currents.sinaida.eu](https://aether-currents.sinaida.eu/)
+**Concept and experience design:** Sinaida Krivchenko — [sinaida.eu](https://sinaida.eu)
 **Music advisor:** Kamil Yegelev (TeleFM), Belgrade — [telefm.bandcamp.com](https://telefm.bandcamp.com/)
 **Stack:** vanilla JS/CSS, ES modules, on-device hand tracking, granular synthesis, WebGL. No build step, no server, no accounts.
 
@@ -12,7 +13,7 @@ Two things usually kill that in browser instruments, and both were design target
 
 ## How
 
-Sinaida designed it as a single signal path. On-device hand tracking reads gesture at up to 40Hz and drives a granular synthesis engine directly:
+Sinaida designed it as a single signal path. On-device hand tracking targets up to 60Hz and drives a granular synthesis engine directly:
 
 ```
 RIGHT HAND x/y ... playhead position / pitch
@@ -23,9 +24,9 @@ FIST ............. freeze the cloud
 FAST OPEN PALM ... burst
 ```
 
-Pitch is scale-quantized from the first note — currently an A minor pentatonic across six bands — so gesture noise can never produce a wrong note, only an expressive one. The visual layer is not a separate output: it is driven by the same signal as the audio, so what you see is what you are playing, not an illustration of it.
+Pitch is scale-quantized from the first note — currently an A minor pentatonic across six bands — so gesture noise is designed to land inside the scale, as an expressive note. The visual layer is not a separate output: it is driven by the same signal as the audio, so what you see is what you are playing, not an illustration of it.
 
-Nothing leaves the device. No camera frame, no audio, no account. The privacy model was a design constraint from day one, not a policy added at the end.
+The tool is built to keep camera frames and audio on the device, with no accounts. The privacy model was a design constraint from day one, not a policy added at the end.
 
 ## What shipped, and what did not work at first
 
@@ -41,6 +42,6 @@ The constraint is small on purpose. Six gestures, one scale, one engine. Inside 
 
 ## Credits
 
-Instrument and code: Sinaida Krivchenko · [sinaida.eu](https://sinaida.eu)
-Music advisor: Kamil Yegelev ([TeleFM](https://telefm.bandcamp.com/))
+concept and experience design by Sinaida Krivchenko — [sinaida.eu](https://sinaida.eu)  
+music advisor: Kamil Yegelev (TeleFM) — [telefm.bandcamp.com](https://telefm.bandcamp.com/)
 Built with on-device hand tracking, granular synthesis, WebGL.

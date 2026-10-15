@@ -763,7 +763,7 @@ export class Recorder {
     const tags = [
       ['IART', 'Sinaida — sinaida.eu'],
       ['IPRD', 'AETHER CURRENTS'],
-      ['ICOP', 'Built-in sounds © Sinaida, CC BY 4.0. ATTRIBUTION REQUIRED wherever this audio appears: AETHER CURRENTS — Sinaida (design) · Music advisor: Kamil Yegelev (TeleFM) — sinaida.eu'],
+      ['ICOP', 'Built-in sounds © Sinaida, CC BY 4.0. ATTRIBUTION REQUIRED wherever this audio appears: AETHER CURRENTS — concept and experience design by Sinaida Krivchenko · music advisor: Kamil Yegelev (TeleFM) — sinaida.eu'],
       ['ICMT', 'https://sinaida.eu'],
       ['ICRD', isoDate(now)],
     ];

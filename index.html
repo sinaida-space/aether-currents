@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>AETHER CURRENTS — conduct sound with your hands</title>
-<meta name="description" content="Conduct sound with your hands. A browser-based instrument: on-device hand tracking drives granular audio synthesis and a real-time visual layer. No install, no server, no accounts." />
+<meta name="description" content="Conduct sound with your hands. A browser-based instrument: on-device hand tracking drives granular audio synthesis and a live visual layer. No install, no server, no accounts." />
 <meta name="robots" content="index, follow" />
 <link rel="canonical" href="https://aether-currents.sinaida.eu/" />
 
@@ -20,7 +20,7 @@
 <meta property="og:site_name" content="AETHER CURRENTS" />
 <meta property="og:url" content="https://aether-currents.sinaida.eu/" />
 <meta property="og:title" content="AETHER CURRENTS — conduct sound with your hands" />
-<meta property="og:description" content="A browser-based instrument: on-device hand tracking drives granular audio synthesis and a real-time visual layer. No install, no server, no accounts." />
+<meta property="og:description" content="A browser-based instrument: on-device hand tracking drives granular audio synthesis and a live visual layer. No install, no server, no accounts." />
 <meta property="og:image" content="https://aether-currents.sinaida.eu/assets/og-image.png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
@@ -29,7 +29,7 @@
 
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="AETHER CURRENTS — conduct sound with your hands" />
-<meta name="twitter:description" content="A browser-based instrument: on-device hand tracking drives granular audio synthesis and a real-time visual layer." />
+<meta name="twitter:description" content="A browser-based instrument: on-device hand tracking drives granular audio synthesis and a live visual layer." />
 <meta name="twitter:image" content="https://aether-currents.sinaida.eu/assets/og-image.png" />
 
 <link rel="stylesheet" href="css/main.css" />
@@ -39,7 +39,7 @@
   "@type": "WebApplication",
   "name": "AETHER CURRENTS",
   "url": "https://aether-currents.sinaida.eu/",
-  "description": "A browser-based instrument that reads hand gesture through the camera, on-device, and turns it into granular audio synthesis and real-time visuals. No install, no MIDI controller — music at your fingertips.",
+  "description": "A browser-based instrument that reads hand gesture through the camera, on-device, and turns it into granular audio synthesis and live visuals. No install, no MIDI controller — music at your fingertips.",
   "applicationCategory": "MultimediaApplication",
   "operatingSystem": "Any (modern desktop browser with camera access)",
   "browserRequirements": "Requires JavaScript and camera access",
@@ -71,10 +71,10 @@
     <div id="boot-gdpr" class="boot-gdpr" hidden>
       <div class="boot-gdpr-title">BEFORE YOU START</div>
       <ul class="boot-gdpr-list">
-        <li>Your camera is processed entirely on-device — video is never uploaded, stored, or sent anywhere.</li>
-        <li>No cookies. No analytics. No server. This is a static page.</li>
+        <li>Your camera is processed in your browser. The tool is built without any video upload or storage.</li>
+        <li>This is a static page, built without cookies, analytics or a server of its own.</li>
         <li>The page remembers a few of your settings in this browser so it opens the way you left it. The full list is in the <a href="legal/privacy.html">privacy policy</a>.</li>
-        <li>The hand-tracking model file is fetched once from Google's MediaPipe CDN — a standard file request, no video or gesture data involved.</li>
+        <li>The hand-tracking library and model load from jsDelivr and Google's CDN as standard file requests. The tool sends no video or gesture data with them.</li>
       </ul>
       <div class="btn-row">
         <button id="btn-boot-accept" class="btn boot-accept">[ ACCEPT ]</button>
@@ -131,15 +131,15 @@
 
     <h2>ARTISTS</h2>
     <p class="credit artists">
-      SINAIDA — concept, interaction &amp; sound design, direction — <a href="https://sinaida.eu">sinaida.eu</a><br />
-      Music advisor: Kamil Yegelev (TeleFM) — <a href="https://telefm.bandcamp.com/">telefm.bandcamp.com</a> (Belgrade)
+      SINAIDA KRIVCHENKO — concept and experience design — <a href="https://sinaida.eu">sinaida.eu</a><br />
+      music advisor: Kamil Yegelev (TeleFM) — <a href="https://telefm.bandcamp.com/">telefm.bandcamp.com</a> (Belgrade)
     </p>
     <p class="credit artists">
       AETHER CURRENTS is a live medium that turns algorithmic tools into a dynamic extension of the physical body, translating movement into sonic and visual currents. Designed and directed by Sinaida and built with agentic tools, with Kamil Yegelev (<a href="https://telefm.bandcamp.com/">TeleFM</a>) as music advisor — a shared conviction that AI-era tools do not have to flatten performance into a prompt.
     </p>
     <p class="credit dos-link">C:\&gt; <a href="https://youtu.be/fxrrSxvKp9Q" target="_blank" rel="noopener">WATCH DEMO.EXE</a></p>
 
-    <p class="credit">concept and experience design by Sinaida — <a href="https://sinaida.eu">sinaida.eu</a><br />
+    <p class="credit">concept and experience design by Sinaida Krivchenko — <a href="https://sinaida.eu">sinaida.eu</a><br />
       music advisor: Kamil Yegelev (TeleFM) — <a href="https://telefm.bandcamp.com/">telefm.bandcamp.com</a></p>
   </div>
 </div>
@@ -232,7 +232,7 @@
   </div>
   <div class="dos-panel-note attribution-notice">
     ATTRIBUTION REQUIRED — post this line wherever you publish:<br />
-    <code id="credit-line">AETHER CURRENTS — Sinaida (design) · Music advisor: Kamil Yegelev (TeleFM) — sinaida.eu</code>
+    <code id="credit-line">AETHER CURRENTS — concept and experience design by Sinaida Krivchenko · music advisor: Kamil Yegelev (TeleFM) — sinaida.eu</code>
   </div>
   <div class="btn-row">
     <button id="btn-copy-credit" class="btn">▸ COPY CREDIT LINE</button>

@@ -5,19 +5,19 @@
 **▸ [LIVE — full experience](https://sinaida-space.github.io/aether-currents/)**
 
 Conduct sound with your hands. A browser-based instrument: on-device hand
-tracking drives granular audio synthesis and a real-time visual layer.
+tracking drives granular audio synthesis and a live visual layer.
 Static site, no build step, no framework — vanilla JS/CSS with ES modules.
 
-Designed and directed by Sinaida, a new media artist based in Prague: concept,
-interaction and sound design, the system specification and testing with players.
+Concept and experience design by Sinaida Krivchenko, a new media artist based in Prague:
+the interaction, the system specification and testing with players.
 Built with agentic tools under her direction. Kamil Yegelev
 (TeleFM, Belgrade) is the music advisor; his hands-on feedback shaped the
 instrument's sound and gesture language.
 
 ## Artists
 
-- **Sinaida** — new media artist, Prague — [sinaida.eu](https://sinaida.eu) — idea, concept and interactive design.
-- Music advisor: **Kamil Yegelev (TeleFM)**, Belgrade — [telefm.bandcamp.com](https://telefm.bandcamp.com/).
+- **Sinaida Krivchenko** — new media artist, Prague — [sinaida.eu](https://sinaida.eu) — concept and experience design.
+- music advisor: **Kamil Yegelev (TeleFM)**, Belgrade — [telefm.bandcamp.com](https://telefm.bandcamp.com/).
 
 ## Quality tiers
 
@@ -26,20 +26,20 @@ applies the best-fitting tier, with a sticky user-override if you switch
 manually:
 
 ```
-FULL ....... full-resolution field sim, 60Hz tracking
-BALANCED ... 192-particle sim, 45Hz / 640px tracking
-LIGHT ...... minimal sim, lowest tracking load
+FULL ....... full-resolution field sim, tracking capped at 60Hz
+BALANCED ... 192-particle sim, tracking capped at 45Hz / 640px
+LIGHT ...... minimal sim, tracking capped at 30Hz
 ```
 
 A perf watchdog steps down one tier at a time (never straight to LIGHT) if
-frame time degrades, keeping hand-following latency as tight as possible on
-the current device.
+frame time degrades, aiming to keep hand-following latency low on the current
+device.
 
 ## Scriabin color mapping
 
 Each of the 12 chromatic notes played tints the visual field with its
-canonical Scriabin synesthesia color — Alexander Scriabin's own
-note-to-color correspondences, rather than an arbitrary palette:
+color after Alexander Scriabin's note-to-color correspondences,
+rather than an arbitrary palette:
 
 ```
 C  ...... red        F  ...... deep red
@@ -68,9 +68,9 @@ FAST OPEN PALM ... burst
 
 ## MIDI out
 
-Gesture and beat events stream live as MIDI CC/notes to any Web MIDI output
-port — `▸ MIDI` in the control row, or the `M` key. Turns the instrument into
-a live controller for Ableton, TouchDesigner, or hardware. See
+Gesture and beat events stream live as MIDI CC/notes to a Web MIDI output
+port — `▸ MIDI` in the control row, or the `M` key. Designed to work as
+a live controller for a DAW, TouchDesigner or hardware. See
 [docs/midi.md](docs/midi.md) for the full CC table and DAW setup.
 
 ## Running locally
@@ -87,13 +87,13 @@ Open `http://localhost:8123`. No build, no dependencies to install.
 index.html            app shell
 css/main.css           all styles
 js/main.js              boot module: consent, system check, mode select, camera
-js/syscheck.js          capability probe (FULL vs LIGHT mode)
+js/syscheck.js          capability probe (FULL, BALANCED or LIGHT)
 legal/                  privacy, terms, license
 ```
 
 ## Privacy
 
-No cookies, no analytics, no server. Camera is processed entirely on-device.
+Built without cookies, analytics or a server of its own. Camera frames are processed on your device.
 See [legal/privacy.html](legal/privacy.html).
 
 ## Support & handoff
@@ -103,6 +103,7 @@ See [legal/privacy.html](legal/privacy.html).
 - Performance tiers: auto-detected on load as FULL, BALANCED or LIGHT, with a manual override; a perf watchdog steps down one tier at a time when frame time degrades
 - Requirements: a webcam for on-device hand tracking; MIDI out needs a Chromium-based browser (see docs/midi.md)
 - Handing over: docs live in docs/ (midi.md, sound-research.md, case-study.md, artist-statement.md); licence terms are in LICENSE, LICENSE-CONTENT and NOTICE
+- Rider for live and installation formats: [legal/rider.html](legal/rider.html)
 - Contact: https://sinaida.eu/collaborate
 
 ## How this was made
@@ -116,12 +117,12 @@ study, modify and share. Run a modified version, including as a hosted
 service, and you publish your source under the same terms. Commercial
 licenses on other terms: [sinaida.eu/collaborate](https://sinaida.eu/collaborate).
 Recordings you make with the tool: CC BY 4.0 with mandatory attribution
-(`AETHER CURRENTS — Sinaida (design) · Music advisor: Kamil Yegelev (TeleFM) — sinaida.eu`, linking [telefm.bandcamp.com](https://telefm.bandcamp.com/) where possible),
+(`AETHER CURRENTS — concept and experience design by Sinaida Krivchenko · music advisor: Kamil Yegelev (TeleFM) — sinaida.eu`, linking [telefm.bandcamp.com](https://telefm.bandcamp.com/) where possible),
 see [LICENSE-CONTENT](LICENSE-CONTENT) and [legal/license.html](legal/license.html).
 Third-party code: [THIRD-PARTY.md](THIRD-PARTY.md).
 
-Concept and experience design by Sinaida — [sinaida.eu](https://sinaida.eu)  
-Music advisor: Kamil Yegelev (TeleFM) — [telefm.bandcamp.com](https://telefm.bandcamp.com/)
+concept and experience design by Sinaida Krivchenko — [sinaida.eu](https://sinaida.eu)  
+music advisor: Kamil Yegelev (TeleFM) — [telefm.bandcamp.com](https://telefm.bandcamp.com/)
 
 This repo is a production mirror.
 

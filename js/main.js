@@ -134,7 +134,7 @@ const BOOT_LINES = [
   { text: 'VIDEO: VHS COMPOSITE ....... OK' },
   { text: '' },
   { text: 'AETHER CURRENTS — conduct sound with your hands.' },
-  { text: 'concept and experience design by Sinaida — sinaida.eu' },
+  { text: 'concept and experience design by Sinaida Krivchenko — sinaida.eu' },
   { text: 'music advisor: Kamil Yegelev (TeleFM) — telefm.bandcamp.com' },
 ];
 const MEMORY_TARGET_KB = 65536;
@@ -639,7 +639,7 @@ function startPerfWatchdog(renderer, currentMode) {
   }, PERF_WATCHDOG_SAMPLE_MS);
 }
 
-const CREDIT_LINE = 'AETHER CURRENTS — Sinaida (design) · Music advisor: Kamil Yegelev (TeleFM) — sinaida.eu';
+const CREDIT_LINE = 'AETHER CURRENTS — concept and experience design by Sinaida Krivchenko · music advisor: Kamil Yegelev (TeleFM) — sinaida.eu';
 const MIC_LABEL = '▸ RECORD MIC (4S)';
 
 // Keep the on-screen attribution line and the "COPY CREDIT LINE" clipboard

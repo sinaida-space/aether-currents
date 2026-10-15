@@ -1,6 +1,6 @@
 # Live MIDI Out
 
-> **Chromium only.** Live MIDI out requires the [Web MIDI API](https://developer.mozilla.org/en-US/docs/Web/API/Web_MIDI_API)
+> **Chromium-based browsers and Firefox 108+.** Live MIDI out requires the [Web MIDI API](https://developer.mozilla.org/en-US/docs/Web/API/Web_MIDI_API)
 > (`navigator.requestMIDIAccess`), which Chrome, Edge, Brave, Opera, and
 > Firefox 108+ support — **Safari (macOS and iOS) does not implement it at
 > all**, with no toggle to enable it. This is a WebKit limitation, not
@@ -8,18 +8,18 @@
 > on unsupported browsers. Safari users can still get every gesture/beat
 > event as a `.mid` file via `▸ SAVE MIDI` after a recording — see below.
 
-Aether Currents can stream gesture and beat events as real-time MIDI to any
+Aether Currents can stream gesture and beat events as real-time MIDI to a
 Web MIDI output port, turning the instrument into a live controller for a
-DAW (Ableton, TouchDesigner, hardware synths/drum racks). Open the panel
+DAW or tool (Ableton, TouchDesigner, hardware synths/drum racks). Open the panel
 with the `▸ MIDI` button in the control row (or the `M` key), pick an output
-port, and play — every gesture and beat event streams out immediately.
+port, and play — gesture and beat events stream out as they happen.
 
 No OSC, no WebSocket bridge, no MIDI input, no Ableton Link. Output only,
 one direction, one scheme.
 
 The same mapping also drives the offline `.mid` export (`▸ SAVE MIDI` after
-a recording) — a recorded file and the live stream are always
-interchangeable, byte-for-byte identical CC numbers and note numbers.
+a recording) — a recorded file and the live stream are designed to be
+interchangeable: the same CC numbers and note numbers.
 
 ## CC / note map
 
@@ -50,7 +50,7 @@ Discrete events:
 | 2       | sample lane unmuted            | note-on 96 + laneIndex                   |
 
 Every note-on is followed by a matching note-off ~50ms later — the live
-bridge always sends complete note pairs, never a hanging note.
+bridge is designed to send complete note pairs, so no note is left hanging.
 
 Beat notes (36/42) land directly on a General MIDI drum rack — no mapping
 needed in most DAWs.

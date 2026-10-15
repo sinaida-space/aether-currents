@@ -10,7 +10,7 @@
 <div class="legal-doc">
 <h1>Privacy</h1>
 
-<p>AETHER CURRENTS does not use cookies, does not run analytics, and has no accounts. There is no server behind this tool beyond the static files you're reading right now.</p>
+<p>AETHER CURRENTS is built without cookies, analytics or accounts. It is a set of static files with no server-side code of its own.</p>
 
 <h2>WHAT THIS SITE STORES</h2>
 <table>
@@ -27,15 +27,15 @@
 </table>
 <p>That's all: nine keys, nothing else. Clearing your browser storage removes all of them.</p>
 
-<h2>WHAT NEVER LEAVES YOUR DEVICE</h2>
+<h2>WHAT STAYS ON YOUR DEVICE</h2>
 <ul>
-  <li><strong>Camera.</strong> Your video feed is processed entirely inside your browser, on your device, using the on-device hand-tracking model. Frames are never transmitted anywhere, never stored, and never leave your machine.</li>
-  <li><strong>Audio.</strong> Any microphone capture or sample audio you load stays local, in memory, for as long as your session runs.</li>
-  <li><strong>Recordings.</strong> Video/audio recordings you make are rendered locally and download straight to your device — they are never uploaded to a server.</li>
+  <li><strong>Camera.</strong> Your video feed is processed inside your browser by the on-device hand-tracking model. The tool is built not to transmit or store frames.</li>
+  <li><strong>Audio.</strong> Microphone recordings you make are kept in memory for your session only.</li>
+  <li><strong>Recordings.</strong> Video and audio recordings are rendered in your browser and saved as a download to your device. The tool has no upload for them.</li>
 </ul>
 
 <h2>THIRD-PARTY FETCHES</h2>
-<p>Two static files are fetched from third-party CDNs at load time: the MediaPipe hand-tracking library and model file, served from Google's and jsDelivr's CDNs. These are standard file requests — the server sees a normal HTTP request for a static asset, nothing about your session, your camera, or your usage. No video or gesture data is ever sent there.</p>
+<p>The hand-tracking library, its WebAssembly runtime and the model file load from jsDelivr and Google's CDN. Like any web request, these show the CDN your IP address and browser. The tool sends no video or gesture data with them.</p>
 
 <h2>Contact</h2>
 <p>Questions: reach out via <a href="https://sinaida.eu">sinaida.eu</a>.</p>

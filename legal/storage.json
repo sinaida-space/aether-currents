@@ -1,0 +1,20 @@
+{
+  "project": "aether-currents",
+  "storage": "localStorage",
+  "keys": [
+    { "key": "ac.consent", "const": "CONSENT_KEY", "file": "js/main.js", "purpose": "Remembers that the boot notice was accepted.", "values": "'1'" },
+    { "key": "ac.mode", "const": "MODE_KEY", "file": "js/main.js", "purpose": "Current performance tier.", "values": "full | balanced | light" },
+    { "key": "ac.modeSource", "const": "MODE_SOURCE_KEY", "file": "js/main.js", "purpose": "Whether the tier was detected automatically or chosen by the user.", "values": "auto | user" },
+    { "key": "ac.declutter", "const": "DECLUTTER_KEY", "file": "js/main.js", "purpose": "Which on-screen items the user hid.", "values": "JSON object" },
+    { "key": "ac.bg", "const": "BG_KEY", "file": "js/main.js", "purpose": "Background choice.", "values": "VOID | CAM" },
+    { "key": "ac.osd", "const": "OSD_KEY", "file": "js/main.js", "purpose": "VHS webcam overlay on or off.", "values": "0 | 1" },
+    { "key": "ac.scale", "const": "SCALE_KEY", "file": "js/main.js", "purpose": "Musical scale the user picked.", "values": "scale id" },
+    { "key": "ac.root", "const": "ROOT_KEY", "file": "js/main.js", "purpose": "Root key the user picked.", "values": "root key index" },
+    { "key": "ac.midiOut", "const": "MIDI_KEY", "file": "js/main.js", "purpose": "Name of the last MIDI output the user connected to.", "values": "port name" }
+  ],
+  "texts": ["legal/privacy.html"],
+  "network": {
+    "note": "Static files only; hand-tracking model and wasm loaded from these hosts.",
+    "hosts": ["cdn.jsdelivr.net", "storage.googleapis.com"]
+  }
+}

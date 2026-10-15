@@ -115,11 +115,13 @@ Code: AGPL 3.0, see [LICENSE](LICENSE) and [NOTICE](NOTICE). Free to use,
 study, modify and share. Run a modified version, including as a hosted
 service, and you publish your source under the same terms. Commercial
 licenses on other terms: [sinaida.eu/collaborate](https://sinaida.eu/collaborate).
-Recordings you make with the tool: CC BY 4.0 with mandatory attribution,
+Recordings you make with the tool: CC BY 4.0 with mandatory attribution
+(`AETHER CURRENTS — Sinaida (design) · Music advisor: Kamil Yegelev (TeleFM) — sinaida.eu`, linking [telefm.bandcamp.com](https://telefm.bandcamp.com/) where possible),
 see [LICENSE-CONTENT](LICENSE-CONTENT) and [legal/license.html](legal/license.html).
 Third-party code: [THIRD-PARTY.md](THIRD-PARTY.md).
 
-Made by Sinaida — [sinaida.eu](https://sinaida.eu)
+Concept and experience design by Sinaida — [sinaida.eu](https://sinaida.eu)  
+Music advisor: Kamil Yegelev (TeleFM) — [telefm.bandcamp.com](https://telefm.bandcamp.com/)
 
 This repo is a production mirror.
 

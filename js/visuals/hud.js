@@ -255,7 +255,7 @@ export class Hud {
     ctx.fillStyle = DIM;
     ctx.shadowColor = WHITE;
     ctx.shadowBlur = 4 * dpr;
-    ctx.fillText('sinaida.eu', W - pad, bottomLine - fontPx);
+    ctx.fillText('AETHER CURRENTS', W - pad, bottomLine - fontPx);
     ctx.textAlign = 'left';
 
     // bottom-center MS-DOS style gesture instruction line(s), above the watermark

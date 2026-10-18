@@ -17,8 +17,7 @@ SCOPE
 WHY AGPL
   The tool is free to use, study, modify and share. Anyone who runs a
   modified version, including as a hosted service, has to publish their
-  source under the same terms. Commercial licenses on other terms are
-  available from the author: https://sinaida.eu/collaborate
+  source under the same terms.
 
 THIRD-PARTY
   This repository uses code by other authors under their own licenses,

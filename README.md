@@ -114,8 +114,7 @@ Sinaida comes up with the idea, the concept and the way to make it into a system
 
 Code: AGPL 3.0, see [LICENSE](LICENSE) and [NOTICE](NOTICE). Free to use,
 study, modify and share. Run a modified version, including as a hosted
-service, and you publish your source under the same terms. Commercial
-licenses on other terms: [sinaida.eu/collaborate](https://sinaida.eu/collaborate).
+service, and you publish your source under the same terms.
 Recordings you make with the tool: CC BY 4.0 with mandatory attribution
 (`AETHER CURRENTS — concept and experience design by Sinaida Krivchenko · music advisor: Kamil Yegelev (TeleFM) — sinaida.eu`, linking [telefm.bandcamp.com](https://telefm.bandcamp.com/) where possible),
 see [LICENSE-CONTENT](LICENSE-CONTENT) and [legal/license.html](legal/license.html).

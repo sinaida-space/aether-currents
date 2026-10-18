@@ -15,9 +15,9 @@ Loaded at runtime from a CDN, not bundled here.
 Copyright Google LLC. Licensed under Apache License 2.0.
 https://github.com/google-ai-edge/mediapipe
 
-## mp4-muxer
+## mp4-muxer — `js/vendor/`
 
-Loaded at runtime from a CDN, not bundled here.
+Version 5.2.2, bundled in js/vendor/ with its license text.
 Copyright (c) Vanilagy. SPDX-License-Identifier: MIT
 https://github.com/Vanilagy/mp4-muxer
 

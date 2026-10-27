@@ -58,13 +58,51 @@ spectral centroid and level modulate brightness/saturation around that hue.
 ## Gestures
 
 ```
-RIGHT HAND x/y ... playhead position / pitch
-RIGHT PINCH ...... grain size
-LEFT HAND HEIGHT . grain density
-TWO-HAND DISTANCE  filter + space
-FIST ............. freeze the cloud
-FAST OPEN PALM ... burst
+RIGHT HAND x/y ............ playhead position / pitch
+RIGHT PINCH ............... grain size
+LEFT HAND HEIGHT .......... grain density
+TWO-HAND DISTANCE ......... filter + space
+FIST ...................... freeze the cloud
+FAST OPEN PALM ............ burst
+RIGHT 3 FINGERS ........... chord (root + fifth)
+LEFT 3 FINGERS (hold) ..... toggle chord / arpeggio
+LEFT INDEX POINT UP/DOWN .. octave shift
+[ / ] · shift-click BEAT .. BPM down/up · type an exact BPM
+MEDIUM .................... stir the field: currents play a second voice
 ```
+
+## Play modes
+
+The start screen offers two ways to play. FLOW is the open instrument: your
+hands conduct the currents freely. GRID turns the instrument into a small tape
+recorder for bars of 16 steps.
+
+Each mode has a short tutorial with live feedback from the camera (FLOW: six
+steps, GRID: five). On a first visit the start button runs it; once finished,
+the page remembers it and the tutorial moves to the `TUTORIAL.EXE` box.
+
+In GRID the beat runs and every bar you play is kept on a tape at the bottom of
+the screen, with a bar counter. Each step keeps a note from the current scale
+plus the grain size, density and filter your hands held at that moment. The
+tape plays through a second voice, so your hands keep playing live on top.
+
+```
+LEFT PINCH (hold) .... write: the step under the playhead takes the right hand's pose
+LEFT FIST (hold) ..... erase the steps the playhead passes
+RIGHT FIST ........... freeze the live cloud
+SPACE or TAP TAPE .... pause and edit
+CTRL/CMD Z ........... undo the last erase run or edit (SHIFT redoes)
+```
+
+Chords, the octave shift and the `[ / ]` BPM keys work in GRID as in FLOW.
+
+In EDIT the tape stops and opens as a note editor. Scroll to any bar
+with a mouse, trackpad, touch or the arrow keys, then add, move or delete
+notes. Drag the red playhead to scrub; hold a note to stutter it.
+Keyboard: Tab into the notes, move with the arrows, press Enter to add.
+Mark a range of bars as a loop, play again from any bar, or export the
+bars as a `.mid` file for a DAW, with or without the beat. The tape is
+saved in this browser; the next GRID start offers to restore it.
 
 ## MIDI out
 
@@ -72,6 +110,10 @@ Gesture and beat events stream live as MIDI CC/notes to a Web MIDI output
 port — `▸ MIDI` in the control row, or the `M` key. Designed to work as
 a live controller for a DAW, TouchDesigner or hardware. See
 [docs/midi.md](docs/midi.md) for the full CC table and DAW setup.
+
+Live out and the GRID `.mid` export are separate: live out streams while you
+play and needs a MIDI port; the export writes the tape to a file and needs
+none.
 
 ## Running locally
 
@@ -84,11 +126,18 @@ Open `http://localhost:8123`. No build, no dependencies to install.
 ## Structure
 
 ```
-index.html            app shell
-css/main.css           all styles
-js/main.js              boot module: consent, system check, mode select, camera
-js/syscheck.js          capability probe (FULL, BALANCED or LIGHT)
-legal/                  privacy, terms, license
+index.html               app shell
+css/main.css             all styles
+js/main.js               boot module: consent, system check, mode select, camera
+js/syscheck.js           capability probe (FULL, BALANCED or LIGHT)
+js/tutorial.js           FLOW and GRID tutorials with live gesture feedback
+js/grid/sequencer.js     GRID transport: the tape on the beat clock, PLAY and EDIT
+js/grid/tape.js          the tape: bars of 16 steps, loop, undo, save format
+js/grid/editor.js        EDIT view: note editor, minimap, loop, export window
+js/visuals/tape-view.js  the tape at the bottom of the screen in PLAY
+js/visuals/crt-overlay.js old-TV glass over the boot and start screens
+js/midi/tape-export.js   tape to Standard MIDI File
+legal/                   privacy, terms, license
 ```
 
 ## Privacy

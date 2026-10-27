@@ -9,11 +9,15 @@ import { BeatTimeline } from './visuals/beat-timeline.js';
 import { Mapper, SCALE_IDS, SCALE_LABELS, ROOT_KEYS } from './mapping.js';
 import { Recorder, downloadBlob } from './recorder.js';
 import { perfBus } from './midi/perf-bus.js';
+import { startCrt } from './visuals/crt-overlay.js';
+import { GridTransport, writeGate } from './grid/sequencer.js';
 import { PerfRecorder } from './midi/perf-recorder.js';
 import { MidiLiveOut } from './midi/live-out.js';
 import { requestTutorial, isTutorialRequested, startTutorial } from './tutorial.js';
 
 const CONSENT_KEY = 'ac.consent';
+const TUTORIAL_DONE_KEY = { flow: 'ac.tutorialDoneFlow', grid: 'ac.tutorialDoneGrid' };
+const TAPE_KEY = 'ac.tape';
 const MODE_KEY = 'ac.mode';
 const MODE_SOURCE_KEY = 'ac.modeSource';
 
@@ -25,6 +29,8 @@ const modeSelect = document.getElementById('mode-select');
 const boot = document.getElementById('boot');
 const bootLinesEl = document.getElementById('boot-lines');
 const bootGdpr = document.getElementById('boot-gdpr');
+// Old-TV glass over the boot and start screens only (js/visuals/crt-overlay.js).
+startCrt(boot, welcome);
 const btnBootAccept = document.getElementById('btn-boot-accept');
 const asciiGlyphs = document.getElementById('ascii-glyphs');
 const btnStartFull = document.getElementById('btn-start-full');
@@ -107,17 +113,16 @@ async function runProbeAndShowModes() {
   // one exists, otherwise the freshly-probed recommendation) — not always
   // the probe's recommendation, which review #51 (finding 4) found could
   // point at the wrong button once a sticky override was in effect.
-  btnStartFull.classList.remove('recommended');
-  btnStartBalanced.classList.remove('recommended');
-  btnStartLight.classList.remove('recommended');
   const activeTier = sticky ? getStoredMode() || probe.recommended : probe.recommended;
-  const recommendedBtn = TIER_BUTTON[activeTier];
-  if (recommendedBtn) recommendedBtn.classList.add('recommended');
+  recommendedTier = probe.recommended;
+  for (const b of Object.values(TIER_BUTTON)) b.removeAttribute('data-recommended');
+  if (TIER_BUTTON[recommendedTier]) TIER_BUTTON[recommendedTier].setAttribute('data-recommended', '1');
+  selectTier(activeTier);
 
   const tierLabel = TIER_LABEL[probe.recommended] || 'FULL';
   syscheckStatus.textContent = sticky
-    ? `SYSTEM: ${tierLabel} recommended — your saved ${TIER_LABEL[getStoredMode()] || tierLabel} tier stays active ▸`
-    : `SYSTEM: ${tierLabel} — auto-applied, pick a tier below to override ▸`;
+    ? `SYSTEM: ${tierLabel} recommended — your saved ${TIER_LABEL[getStoredMode()] || tierLabel} tier stays active`
+    : `SYSTEM: ${tierLabel} — auto-applied, pick another tier to override`;
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +201,11 @@ async function runBootSequence() {
 
 function finishTyping() {
   typingDone = true;
+  const hint = document.getElementById('boot-hint');
+  if (hint) hint.hidden = true;
   bootGdpr.hidden = false;
+  btnBootAccept.focus({ preventScroll: true }); // Enter accepts
+  bootGdpr.scrollIntoView({ block: 'nearest' });
 }
 
 function skipTyping() {
@@ -305,6 +314,7 @@ async function startWithMode(mode, audioContext) {
 
     welcome.style.display = 'none';
     uiBar.classList.add('visible');
+    document.body.classList.toggle('play-grid', window.AC_PLAY === 'grid');
 
     if (typeof window.__AC_BOOT === 'function') {
       window.__AC_BOOT(mode, audioContext);
@@ -329,9 +339,81 @@ function startWithModeFromGesture(mode) {
   startWithMode(mode, audioContext);
 }
 
-btnStartFull.addEventListener('click', () => startWithModeFromGesture('full'));
-btnStartBalanced.addEventListener('click', () => startWithModeFromGesture('balanced'));
-btnStartLight.addEventListener('click', () => startWithModeFromGesture('light'));
+// FLOW / GRID play mode. Session-only on purpose: never stored.
+window.AC_PLAY = 'flow';
+const btnPlayFlow = document.getElementById('btn-play-flow');
+const btnPlayGrid = document.getElementById('btn-play-grid');
+function setPlay(play) {
+  window.AC_PLAY = play === 'grid' ? 'grid' : 'flow';
+  const grid = window.AC_PLAY === 'grid';
+  btnPlayFlow?.classList.toggle('selected', !grid);
+  btnPlayGrid?.classList.toggle('selected', grid);
+  btnPlayFlow?.setAttribute('aria-pressed', String(!grid));
+  btnPlayGrid?.setAttribute('aria-pressed', String(grid));
+  const label = grid ? 'GRID' : 'FLOW';
+  const steps = grid ? 5 : 6;
+  // First visit to a mode: the tutorial is the main action, SKIP the second.
+  const first = !isTutorialDone(window.AC_PLAY);
+  const start = document.getElementById('btn-start');
+  if (start) {
+    start.dataset.tutorial = first ? '1' : '';
+    if (first) start.innerHTML = `▸ START ${label}<span class="start-sub">WITH THE ${steps}-STEP TUTORIAL</span>`;
+    else start.textContent = `▸ START ${label}`;
+  }
+  const skip = document.getElementById('btn-start-skip');
+  if (skip) skip.hidden = !first;
+  const tutBox = document.getElementById('tut-box');
+  if (tutBox) tutBox.hidden = first;
+  if (btnTutorial) btnTutorial.textContent = `▸ RUN ${label} TUTORIAL`;
+  const tutText = document.getElementById('tut-text');
+  if (tutText) tutText.firstChild.textContent = `${steps} STEPS, HANDS ONLY`;
+  const gm = document.getElementById('gest-mode');
+  if (gm) gm.textContent = label;
+  document.querySelectorAll('.gesture-table[data-for]').forEach((t) => {
+    t.hidden = t.dataset.for !== (grid ? 'grid' : 'flow');
+  });
+}
+btnPlayFlow?.addEventListener('click', () => setPlay('flow'));
+btnPlayGrid?.addEventListener('click', () => setPlay('grid'));
+
+// Finished tutorials are remembered per mode (TUTORIAL_DONE_KEY).
+function isTutorialDone(play) {
+  try {
+    return localStorage.getItem(TUTORIAL_DONE_KEY[play]) === '1';
+  } catch (err) {
+    return false;
+  }
+}
+
+function markTutorialDone(play) {
+  try {
+    localStorage.setItem(TUTORIAL_DONE_KEY[play], '1');
+  } catch (err) {
+    /* storage blocked: the tutorial is offered again next time */
+  }
+}
+setPlay('flow');
+
+// Quality is a switch; START is the one action (welcome layout B).
+const TIER_HINT = { full: 'BEST VISUALS, STRONG MACHINE', balanced: 'MOST LAPTOPS', light: 'OLDER OR HOT DEVICES' };
+let selectedTier = 'full';
+let recommendedTier = null;
+function selectTier(tier) {
+  if (!TIER_BUTTON[tier]) return;
+  selectedTier = tier;
+  for (const [t, b] of Object.entries(TIER_BUTTON)) b.setAttribute('aria-pressed', String(t === tier));
+  const note = document.getElementById('tier-note');
+  if (note) {
+    const picked = tier === recommendedTier ? ' · PICKED FOR THIS DEVICE' : '';
+    note.innerHTML = `<b>${TIER_LABEL[tier] || tier.toUpperCase()}</b> · ${TIER_HINT[tier]}${picked}`;
+  }
+}
+for (const [t, b] of Object.entries(TIER_BUTTON)) b.addEventListener('click', () => selectTier(t));
+document.getElementById('btn-start')?.addEventListener('click', (e) => {
+  if (e.currentTarget.dataset.tutorial === '1') requestTutorial();
+  startWithModeFromGesture(selectedTier);
+});
+document.getElementById('btn-start-skip')?.addEventListener('click', () => startWithModeFromGesture(selectedTier));
 
 // "RUN TUTORIAL.EXE" — same synchronous-AudioContext start path as the mode
 // buttons (see startWithModeFromGesture comment above for why), just flagged
@@ -342,7 +424,7 @@ btnStartLight.addEventListener('click', () => startWithModeFromGesture('light'))
 // need it (review #51, finding 1).
 btnTutorial.addEventListener('click', (e) => {
   e.preventDefault();
-  requestTutorial();
+  requestTutorial(); // runs the tutorial of the selected mode (FLOW or GRID)
   const mode = getStoredMode() || 'full';
   startWithModeFromGesture(mode);
 });
@@ -721,7 +803,28 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
   tracker.start();
   mapper.start();
 
-  if (isTutorialRequested()) startTutorial({ tracker, perfBus });
+  // GRID play mode: transport instance (null in FLOW), booted at the end of __AC_BOOT.
+  let gridSeq = null;
+
+  // The tape restore offer (GRID) waits while the tutorial runs.
+  let tutorialRunning = false;
+  let showTapeRestore = null;
+  if (isTutorialRequested()) {
+    const play = window.AC_PLAY;
+    tutorialRunning = true;
+    startTutorial({
+      tracker,
+      perfBus,
+      play,
+      getGrid: () => gridSeq,
+      audioContext,
+      onComplete: () => markTutorialDone(play),
+      onExit: () => {
+        tutorialRunning = false;
+        if (showTapeRestore) showTapeRestore();
+      },
+    });
+  }
 
   if (mode !== 'light') startPerfWatchdog(renderer, mode);
 
@@ -1129,6 +1232,7 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
   }
 
   async function toggleBeat() {
+    if (gridSeq && gridSeq.mode === 'edit') return; // the tape owns the beat while editing
     await engine.setBeat(!engine.beatOn);
     updateBeatButton();
   }
@@ -1397,13 +1501,200 @@ window.__AC_BOOT = async function __AC_BOOT(mode, providedAudioContext) {
         const entry = entryById(id);
         return { id, name: entry ? entry.name : id, muted: mutedIds.has(id) };
       });
-      beatTimeline.draw(
-        { visible: true, bpm: phase.bpm, phase: phase.phase, beatIndex: phase.beatIndex, lanes },
-        now
-      );
+      const state = { visible: true, bpm: phase.bpm, phase: phase.phase, beatIndex: phase.beatIndex, lanes };
+      beatTimeline.draw(state, now);
       requestAnimationFrame(tickBeatTimeline);
     };
     requestAnimationFrame(tickBeatTimeline);
+  }
+
+  // ---- GRID play mode and tape -------------------------------
+  // Hands keep voice 1; the left hand writes into the bar under the playhead
+  // and every bar is kept on the tape. Space pauses into EDIT (js/grid/editor.js).
+  if (window.AC_PLAY === 'grid') {
+    (async () => {
+      try {
+        await engine.enableMedium();
+        engine.setMediumActive(true);
+        tracker.setGridMode(true);
+        mapper.setGridMode(true);
+        const grid = new GridTransport({
+          engine,
+          getScale: () => ({ scaleId: mapper.getScaleId(), rootIndex: mapper.getRootKeyIndex() }),
+          setVoice1Muted: (muted) => mapper.setVoice1Muted(muted),
+        });
+        grid.start(); // hook in before the beat starts so step8 0 is not missed
+        gridSeq = grid;
+        await engine.setBeat(true);
+        updateBeatButton();
+
+        let writeOn = false; // left pinch hysteresis, shared with the tutorial (writeGate)
+        const feedGrid = () => {
+          const st = tracker.getState();
+          const g = st.gestures;
+          const left = !st.stale && !!st.hands.left;
+          writeOn = writeGate(writeOn, g.leftPinch, left);
+          grid.setInput({ write: writeOn, erase: left && g.leftFist, pose: mapper.getPose() });
+          requestAnimationFrame(feedGrid);
+        };
+        requestAnimationFrame(feedGrid);
+
+        // Tape view + EDIT UI are separate modules; a missing one is logged once.
+        let tapeView = null;
+        let editor = null;
+        try {
+          const { TapeView } = await import('./visuals/tape-view.js');
+          const canvas = document.getElementById('tape-canvas');
+          tapeView = new TapeView(canvas, { onTap: () => grid.enterEdit() });
+        } catch (err) {
+          console.error('[AETHER CURRENTS] tape view unavailable:', err);
+        }
+        try {
+          const { TapeEditor } = await import('./grid/editor.js');
+          editor = new TapeEditor(document.getElementById('tape-editor'), { grid });
+          editor.onPlayFromHere = (bar) => grid.exitEdit(bar);
+        } catch (err) {
+          console.error('[AETHER CURRENTS] tape editor unavailable:', err);
+        }
+        grid.onModeChange((mode) => {
+          saveTapeNow();
+          updateBeatButton();
+          setTimeout(updateBeatButton, 150); // the beat restarts a moment after exitEdit
+          if (!editor) return;
+          if (mode === 'edit') editor.open();
+          else editor.close();
+        });
+
+        if (tapeView) {
+          const drawTape = (now) => {
+            tapeView.draw(
+              { tape: grid.tape, playhead: grid.playhead, armed: grid.armed, bpm: grid.bpm, mode: grid.mode },
+              now,
+            );
+            requestAnimationFrame(drawTape);
+          };
+          requestAnimationFrame(drawTape);
+        }
+
+        // ---- undo in PLAY, erase toast, autosave + restore offer ----------------
+        const playToast = document.getElementById('play-toast');
+        const playToastText = document.getElementById('play-toast-text');
+        const playToastUndo = document.getElementById('play-toast-undo');
+        let playToastT = 0;
+        function showPlayToast(text, withUndo) {
+          playToastText.textContent = text;
+          playToastUndo.hidden = !withUndo;
+          playToast.hidden = false;
+          clearTimeout(playToastT);
+          playToastT = setTimeout(() => { playToast.hidden = true; }, withUndo ? 6000 : 2500);
+        }
+        function undoTape(redo) {
+          const ok = redo ? grid.tape.redo() : grid.tape.undo();
+          showPlayToast(ok ? (redo ? 'REDONE' : 'UNDONE') : (redo ? 'NOTHING TO REDO' : 'NOTHING TO UNDO'), false);
+        }
+        grid.onErase = ({ steps }) => {
+          showPlayToast(`ERASED ${steps} STEP${steps === 1 ? '' : 'S'}`, true);
+        };
+        playToastUndo.addEventListener('click', () => { playToastUndo.blur(); undoTape(false); });
+        // the editor binds its own Ctrl/Cmd+Z while EDIT is open
+        document.addEventListener('keydown', (e) => {
+          if (grid.mode !== 'play' || !(e.metaKey || e.ctrlKey) || e.altKey) return;
+          if (e.key !== 'z' && e.key !== 'Z') return;
+          const t = e.target;
+          if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+          e.preventDefault();
+          undoTape(e.shiftKey);
+        });
+
+        // The tape is saved in this browser (ac.tape): on every mode change,
+        // a moment after the last change, and when the page is hidden. While
+        // the RESTORE offer is open nothing is saved, so the old tape is safe.
+        let restorePending = false;
+        let hadNotes = false;
+        let saveT = 0;
+        function saveTapeNow() {
+          clearTimeout(saveT);
+          if (restorePending) return;
+          try {
+            if (grid.tape.hasNotes()) {
+              hadNotes = true;
+              localStorage.setItem(TAPE_KEY, JSON.stringify({ savedAt: Date.now(), tape: grid.tape.toJSON() }));
+            } else if (hadNotes) {
+              localStorage.removeItem(TAPE_KEY); // the player cleared the tape on purpose
+            }
+          } catch (err) {
+            console.warn('[AETHER CURRENTS] tape autosave failed:', err);
+          }
+        }
+        grid.tape.onChange(() => {
+          clearTimeout(saveT);
+          saveT = setTimeout(saveTapeNow, 1500);
+        });
+        window.addEventListener('pagehide', saveTapeNow);
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'hidden') saveTapeNow();
+        });
+
+        let saved = null;
+        try {
+          saved = JSON.parse(localStorage.getItem(TAPE_KEY) || 'null');
+        } catch (err) {
+          saved = null;
+        }
+        const savedBars = saved && saved.tape && Array.isArray(saved.tape.bars) ? saved.tape.bars : null;
+        const savedNotes = savedBars ? savedBars.reduce((n, b) => n + (Array.isArray(b) ? b.length : 0), 0) : 0;
+        if (savedNotes > 0) {
+          restorePending = true;
+          const restoreEl = document.getElementById('tape-restore');
+          const when = new Date(saved.savedAt || 0);
+          const p2 = (n) => String(n).padStart(2, '0');
+          document.getElementById('tape-restore-info').textContent =
+            `${savedBars.length} BAR${savedBars.length === 1 ? '' : 'S'} · ${savedNotes} NOTE${savedNotes === 1 ? '' : 'S'}` +
+            (saved.savedAt ? ` · SAVED ${p2(when.getDate())}.${p2(when.getMonth() + 1)}. ${p2(when.getHours())}:${p2(when.getMinutes())}` : '');
+          const resolve = (restore) => {
+            restoreEl.hidden = true;
+            restorePending = false;
+            if (restore) {
+              if (grid.tape.load(saved.tape)) showPlayToast('LAST TAPE RESTORED', true);
+              else showPlayToast('THAT TAPE COULD NOT BE READ', false);
+            }
+            saveTapeNow();
+          };
+          document.getElementById('btn-tape-restore').addEventListener('click', () => resolve(true));
+          document.getElementById('btn-tape-fresh').addEventListener('click', () => resolve(false));
+          // during the tutorial the offer waits until the tutorial closes
+          showTapeRestore = () => { restoreEl.hidden = false; };
+          if (!tutorialRunning) showTapeRestore();
+        }
+
+        // Space: PLAY <-> EDIT (resume from the editor's cursor bar).
+        document.addEventListener('keydown', (e) => {
+          if (e.code !== 'Space' && e.key !== ' ') return;
+          const t = e.target;
+          if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+          if (t && t.closest && t.closest('.te-exp.on')) return; // export window: Space presses its focused button
+          // tutorial controls, toasts and the restore offer: Space presses the focused button
+          if (t && t.closest && t.closest('.tutorial-overlay, .play-toast')) return;
+          // while a menu (sources, MIDI, declutter) is open Space stays with it
+          if ([...document.querySelectorAll('.dos-panel')].some((p) => p.style.display !== 'none')) return;
+          e.preventDefault(); // no page scroll, no button click
+          if (t && t.tagName === 'BUTTON') t.blur();
+          if (e.repeat) return;
+          if (grid.mode === 'play') grid.enterEdit();
+          else grid.exitEdit(editor ? editor.cursorBar : grid.playhead.bar);
+        });
+
+        // The tape lives only in memory: ask the browser to confirm leaving.
+        window.addEventListener('beforeunload', (e) => {
+          if (!grid.tape.hasNotes()) return;
+          e.preventDefault();
+          e.returnValue = '';
+        });
+      } catch (err) {
+        console.error('[AETHER CURRENTS] grid boot failed:', err);
+        hudStatus.textContent = 'GRID FAILED — SEE CONSOLE';
+      }
+    })();
   }
 };
 

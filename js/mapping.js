@@ -35,7 +35,7 @@ export const SCALE_LABELS = {
 };
 // Chromatic root names, C=0 .. B=11 (standard pitch-class order).
 export const ROOT_KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const DEFAULT_ROOT_INDEX = 9; // 'A' — matches the original hardcoded A minor pentatonic exactly.
+export const DEFAULT_ROOT_INDEX = 9; // 'A' — matches the original hardcoded A minor pentatonic exactly.
 
 // Scriabin synesthesia note->color mapping (issue #49), indexed by chromatic
 // index 0-11 (C=0), same order as ROOT_KEYS. Canonical Scriabin hues; used by
@@ -157,6 +157,11 @@ export class Mapper {
     // Single flag gates every field/voice-2 code path added to _tick() below;
     // with this false and MEDIUM never enabled, all of it is a no-op (DoD).
     this.mediumOn = false;
+    // GRID play mode: voice 2 belongs to the step sequencer, so
+    // the MEDIUM field -> voice-2 writes below must not run.
+    this.gridMode = false;
+    this.voice1Muted = false; // GRID EDIT: voice 1 silent, tracking keeps running
+    this._lastSemitones = null; // final transposition vs the sample, set each tick
     // Field sim is always constructed (cheap: ~9 small Float32Arrays, no
     // audio node), but step()/inject only run while mediumOn or the field
     // still has residual energy from before MEDIUM was switched off.
@@ -354,6 +359,7 @@ export class Mapper {
       const rootOffset = this._rootKeyIndex - DEFAULT_ROOT_INDEX; // transposes vs. the original A-rooted scale
       const semitones = SCALE_DEFS[this._scaleId][this._committedBand] + rootOffset + 12 * this._octaveShift;
       const pitch = Math.max(0.25, Math.min(4, Math.pow(2, semitones / 12)));
+      this._lastSemitones = semitones;
       // Snap-fast on a band change (new note = attack), glide within the same
       // band (octave-shift re-write only) to avoid an audible pop (task 5).
       this._setParam('pitch', 'pitch', pitch, bandChanged ? TAU_PITCH_SNAP : TAU_PITCH_GLIDE);
@@ -395,7 +401,7 @@ export class Mapper {
     // --- no-hands idle bed vs. active density/gain ---
     const anyHand = !!(hands.left || hands.right);
     const targetDensity = anyHand ? (densityFromHand != null ? densityFromHand : this._last.density || 12) : 6;
-    const targetGain = anyHand ? 0.8 : 0.35;
+    const targetGain = this.voice1Muted ? 0 : anyHand ? 0.8 : 0.35;
 
     // ease density/gain over ~2s (one-pole toward target, tau ~= 2s/3)
     const easeTau = 2 / 3;
@@ -407,13 +413,13 @@ export class Mapper {
     this._setParam('density', 'density', easedDensity);
 
     const curGain = this._last.gain != null ? this._last.gain : targetGain;
-    const easedGain = curGain + (targetGain - curGain) * alpha;
+    const easedGain = this.voice1Muted ? 0 : curGain + (targetGain - curGain) * alpha;
     this._setParam('gain', 'gain', easedGain);
 
     this._handsPresent = anyHand;
 
     // --- MEDIUM: field -> voice-2 param mapping ---
-    if (this.engine.mediumEnabled && (this.mediumOn || this._field.hasEnergy())) {
+    if (!this.gridMode && this.engine.mediumEnabled && (this.mediumOn || this._field.hasEnergy())) {
       this._updateMediumVoice();
     }
 
@@ -606,6 +612,36 @@ export class Mapper {
     // position jitter in granular-worklet.js (`_spawn()`), which is exactly
     // the "spray" character called for.
     this._setParam('mediumSpread', 'spread', Math.min(1, f.vorticity * MEDIUM_VORTICITY_TO_SPREAD), undefined, mp);
+  }
+
+  setGridMode(on) {
+    this.gridMode = !!on;
+  }
+
+  // GRID EDIT silences voice 1 (its gain param goes to 0); restoring lets the
+  // normal ease bring it back up.
+  setVoice1Muted(on) {
+    this.voice1Muted = !!on;
+  }
+
+  // Current voice-1 targets as a GRID step (see js/grid/sequencer.js contract).
+  // Values are already scale-quantized by _tick(); null until a pitch exists.
+  getPose() {
+    const semitones = this._lastSemitones;
+    const l = this._last;
+    if (semitones == null || l.grainSize == null || l.density == null || l.filterCutoff == null) return null;
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    if (this._committedBand == null) return null;
+    return {
+      band: this._committedBand,
+      octave: this._octaveShift,
+      semitones,
+      pc: (((9 + semitones) % 12) + 12) % 12, // sample root is A (C=0 -> A=9)
+      pitch: clamp(Math.pow(2, semitones / 12), 0.25, 4),
+      grainSize: clamp(l.grainSize, 0.02, 0.5),
+      density: clamp(l.density, 1, 80),
+      filterCutoff: clamp(l.filterCutoff, 100, 18000),
+    };
   }
 
   _setReverb(target) {

@@ -131,7 +131,7 @@ export class Hud {
     // Persistent recorder error line — shown regardless of ?debug, errors
     // are never silent. Sticks for the caller-defined window (recordErrorUntil).
     if (s.recordError && now < (s.recordErrorUntil || 0)) {
-      line('⚠ ' + s.recordError, RED);
+      line(s.recordError, RED);
     }
 
     // WebGL context-loss notice (issue #21) — visuals only, audio keeps
@@ -139,11 +139,11 @@ export class Hud {
     // repeated more than once in this session, offers a LIGHT-mode escape
     // hatch via keyboard (main.js binds 'L').
     if (osd && osd.glLost) {
-      if (blinkOn) line('⚠ GPU CONTEXT LOST — RECOVERING…', RED);
+      if (blinkOn) line('GPU CONTEXT LOST: RECOVERING…', RED);
       else y += lh;
     }
     if (osd && osd.glLossRepeated) {
-      line(`⚠ GPU UNSTABLE (${osd.glLossCount}×) — PRESS L FOR LIGHT MODE`, RED);
+      line(`GPU UNSTABLE (${osd.glLossCount}×): PRESS L FOR LIGHT MODE`, RED);
     }
 
     // debug panel (?debug URL flag) — FPS/latency/encoder-queue instrumentation.

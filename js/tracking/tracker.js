@@ -4,6 +4,10 @@
 // extraction and the gesture state machine. The vision worker only ever
 // returns plain landmark data — all interpretation happens here.
 
+// MediaPipe is served from js/vendor/, so the page asks no other host for
+// anything. The version is part of the path; to upgrade, add a new folder.
+const MEDIAPIPE = new URL('../vendor/mediapipe/0.10.14/', import.meta.url);
+
 const LANDMARK_COUNT = 21;
 
 // FULL mode's tracking rate was raised 40->60Hz (task 5): FULL is only ever
@@ -306,15 +310,15 @@ export class HandTracker {
     const report = (p) => { if (onProgress) onProgress(p); };
     report(0);
     const { HandLandmarker, FilesetResolver } = await import(
-      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs'
+      new URL('vision_bundle.mjs', MEDIAPIPE).href
     );
     const vision = await FilesetResolver.forVisionTasks(
-      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
+      new URL('wasm', MEDIAPIPE).href
     );
     report(0.6);
 
     const modelAssetBuffer = await fetchWithProgress(
-      'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+      new URL('models/hand_landmarker.task', MEDIAPIPE).href,
       (p) => report(0.6 + p * 0.35)
     );
 

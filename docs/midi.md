@@ -36,7 +36,7 @@ Discrete events:
 | 2       | sample lane unmuted            | note-on 96 + laneIndex                   |
 | 3       | grid step (GRID mode)          | note-on 57 + semitones (A3 = 57), after CC 22–24 on channel 3 |
 
-Every note-on is followed by a matching note-off ~50ms later. The live bridge is designed to send complete note pairs, so no note keeps sounding.
+Every note-on is followed by a matching note-off ~50 ms later. The live bridge is designed to send complete note pairs, so no note keeps sounding after its gesture ends.
 
 Beat notes (36/42) land directly on a General MIDI drum rack, so most DAWs need no mapping.
 

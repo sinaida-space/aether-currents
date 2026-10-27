@@ -75,7 +75,7 @@ CTRL/CMD Z ........... undo the last erase run or edit (SHIFT redoes)
 
 Chords, the octave shift and the `[ / ]` BPM keys work in GRID as in FLOW.
 
-In EDIT the tape stops and opens as a note editor. Scroll to any bar with a mouse, trackpad, touch or the arrow keys, then add, move or delete notes. Drag the red playhead to scrub, or hold a note to make it stutter. Keyboard: Tab into the notes, move with the arrows, press Enter to add. Mark a range of bars as a loop, play again from any bar, or export the bars as a `.mid` file for a DAW, with or without the beat. The tape is saved in this browser; the next GRID start offers to restore it.
+In EDIT the tape stops and opens as a note editor. Scroll to any bar with a mouse, trackpad, touch or the arrow keys, then add, move or delete notes. Drag the red playhead to scrub, or hold a note to make it stutter. Keyboard: Tab into the notes, move with the arrows, press Enter to add. Mark a range of bars as a loop, play again from any bar, or export the bars as a `.mid` file for a DAW, with or without the beat. The tape is saved in this browser; the next GRID start offers to restore it.
 
 ## MIDI out
 
@@ -110,12 +110,13 @@ legal/                   privacy, terms, license
 
 ## Privacy
 
-Built without cookies, analytics or a server of its own. Camera frames are processed on your device. See [legal/privacy.html](legal/privacy.html).
+Built without cookies, analytics or a server of its own. Camera frames are processed on your device, and the page loads nothing from other servers. See [legal/privacy.html](legal/privacy.html).
 
 ## Support & handoff
 
 - Status: active (maintained by Sinaida Krivchenko)
 - Run locally: `python3 -m http.server 8123`, then open http://localhost:8123 (no build step)
+- Offline: the hand-tracking library and model ship in js/vendor/mediapipe, so a local copy runs without internet
 - Performance tiers: auto-detected on load as FULL, BALANCED or LIGHT, with a manual override; a perf watchdog steps down one tier at a time when frame time degrades
 - Requirements: a webcam for on-device hand tracking; MIDI out needs a Chromium-based browser (see docs/midi.md)
 - Handing over: docs live in docs/ (midi.md, sound-research.md, case-study.md, artist-statement.md); licence terms are in LICENSE, LICENSE-CONTENT and NOTICE

@@ -148,7 +148,19 @@ export class MidiLiveOut {
       this._sendWithOff([0x91, note, 100], [0x81, note, 0]); // ch2 idx1
     };
 
+    // Grid notes (ch3): CC 22/23/24 = grainSize/density/filterCutoff, then note.
+    const onGridNote = ({ note, step }) => {
+      if (!this._port || !step) return;
+      const n = Math.max(0, Math.min(127, note | 0));
+      const cc7 = (v) => Math.max(0, Math.min(127, Math.round(v)));
+      this._send([0xb2, 22, cc7(((step.grainSize - 0.02) / 0.48) * 127)]);
+      this._send([0xb2, 23, cc7(((step.density - 1) / 79) * 127)]);
+      this._send([0xb2, 24, cc7((Math.log(step.filterCutoff / 100) / Math.log(180)) * 127)]);
+      this._sendWithOff([0x92, n, 100], [0x82, n, 0]);
+    };
+
     this._unsubs = [
+      perfBus.on('gridNote', onGridNote),
       perfBus.on('cc', onCc),
       perfBus.on('kick', onKick),
       perfBus.on('hat', onHat),

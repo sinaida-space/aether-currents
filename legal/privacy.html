@@ -26,13 +26,17 @@
   <tr><td><code>ac.scale</code></td><td>The musical scale you picked.</td></tr>
   <tr><td><code>ac.root</code></td><td>The root key you picked.</td></tr>
   <tr><td><code>ac.midiOut</code></td><td>Name of the last MIDI output you connected to. Written only when you choose a MIDI port.</td></tr>
+  <tr><td><code>ac.tutorialDoneFlow</code></td><td>That you finished the FLOW tutorial, so the start screen stops offering it first.</td></tr>
+  <tr><td><code>ac.tutorialDoneGrid</code></td><td>The same for the GRID tutorial.</td></tr>
+  <tr><td><code>ac.tape</code></td><td>Your last GRID tape: the notes you wrote, the loop and the time it was saved, so you can restore it next time. Written only in GRID mode once the tape has notes.</td></tr>
 </table>
-<p>That's all: nine keys, nothing else. Clearing your browser storage removes all of them.</p>
+<p>That's all: twelve keys, nothing else. Clearing your browser storage removes all of them.</p>
 
 <h2>WHAT STAYS ON YOUR DEVICE</h2>
 <ul>
   <li><strong>Camera.</strong> Your video feed is processed inside your browser by the on-device hand-tracking model. The tool is built not to transmit or store frames.</li>
   <li><strong>Audio.</strong> Microphone recordings you make are kept in memory for your session only.</li>
+  <li><strong>GRID tape.</strong> The notes you write in GRID mode stay in this browser (the <code>ac.tape</code> key above). A <code>.mid</code> export is saved as a download to your device.</li>
   <li><strong>Recordings.</strong> Video and audio recordings are rendered in your browser and saved as a download to your device. The tool has no upload for them.</li>
 </ul>
 

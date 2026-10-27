@@ -84,6 +84,9 @@ class BeatScheduler {
     // emit 'kick'/'hat' events for the MIDI performance recorder, without
     // this module knowing anything about MIDI.
     this.onEvent = null;
+    // (step8, audioTime, sec8th) for every scheduled 8th: the grid sequencer
+    // hangs its 16ths off this so both share one clock, lookahead and tempo.
+    this.onStep8 = null;
   }
 
   start() {
@@ -139,6 +142,7 @@ class BeatScheduler {
   }
 
   _schedule(step, t) {
+    if (this.onStep8) this.onStep8(step, t, this._sec8th);
     if ((step & 1) === 0) {
       this._kick(t);
       this._sidechain(t);

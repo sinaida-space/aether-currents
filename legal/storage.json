@@ -10,7 +10,10 @@
     { "key": "ac.osd", "const": "OSD_KEY", "file": "js/main.js", "purpose": "VHS webcam overlay on or off.", "values": "0 | 1" },
     { "key": "ac.scale", "const": "SCALE_KEY", "file": "js/main.js", "purpose": "Musical scale the user picked.", "values": "scale id" },
     { "key": "ac.root", "const": "ROOT_KEY", "file": "js/main.js", "purpose": "Root key the user picked.", "values": "root key index" },
-    { "key": "ac.midiOut", "const": "MIDI_KEY", "file": "js/main.js", "purpose": "Name of the last MIDI output the user connected to.", "values": "port name" }
+    { "key": "ac.midiOut", "const": "MIDI_KEY", "file": "js/main.js", "purpose": "Name of the last MIDI output the user connected to.", "values": "port name" },
+    { "key": "ac.tutorialDoneFlow", "const": "TUTORIAL_DONE_KEY", "file": "js/main.js", "purpose": "The FLOW tutorial was finished.", "values": "'1'" },
+    { "key": "ac.tutorialDoneGrid", "const": "TUTORIAL_DONE_KEY", "file": "js/main.js", "purpose": "The GRID tutorial was finished.", "values": "'1'" },
+    { "key": "ac.tape", "const": "TAPE_KEY", "file": "js/main.js", "purpose": "Last GRID tape (notes, loop, save time) for the restore offer.", "values": "JSON object" }
   ],
   "texts": ["legal/privacy.html"],
   "network": {

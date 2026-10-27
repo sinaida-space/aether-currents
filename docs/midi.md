@@ -48,12 +48,35 @@ Discrete events:
 | 2       | sample switched off           | note-on 72 + laneIndex                   |
 | 2       | sample lane muted              | note-on 84 + laneIndex                   |
 | 2       | sample lane unmuted            | note-on 96 + laneIndex                   |
+| 3       | grid step (GRID mode)          | note-on 57 + semitones (A3 = 57), after CC 22–24 on channel 3 |
 
 Every note-on is followed by a matching note-off ~50ms later — the live
 bridge is designed to send complete note pairs, so no note is left hanging.
 
 Beat notes (36/42) land directly on a General MIDI drum rack — no mapping
 needed in most DAWs.
+
+## Grid mode
+
+In GRID mode each written step plays as a note on channel 3, preceded by
+CC 22, 23 and 24 on the same channel with that step's grain size, density and
+filter.
+
+`EXPORT` in the grid editor writes the chosen bars (the loop range, or the whole
+tape) as a Standard MIDI File, type 1, with three tracks (two when
+`INCLUDE BEAT` is unticked):
+
+| Track | Content                                                        |
+|-------|----------------------------------------------------------------|
+| 0     | tempo, 4/4, track name, scale label                            |
+| 1     | GRID, channel 3: notes plus CC 22–24 before each note          |
+| 2     | BEAT, channel 10: kick (36) on every quarter, hat (42) on off-beat 8ths |
+
+Every note has velocity 100 and lasts one 16th step; dynamics and note
+lengths are shaped in the DAW.
+
+It is a Standard MIDI File (type 1), the format DAWs import. Chromium-based
+browsers ask where to save it; other browsers download it.
 
 ## Setup
 

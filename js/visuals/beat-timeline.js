@@ -7,6 +7,7 @@
 // Boundary: reads only what main.js hands it via draw(state) — no direct
 // engine/mapper/library access — so it stays a pure render + hit-test layer.
 
+
 const WHITE = '#f2f2f2';
 const CYAN = '#00e5ff';
 const DIM_LINE = 'rgba(242,242,242,0.18)';

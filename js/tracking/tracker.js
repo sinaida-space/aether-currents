@@ -31,9 +31,11 @@ const MODE_CONFIG = {
 // flips the label relative to the physical hand: MediaPipe's "Left"
 // corresponds to the user's physical RIGHT hand, and "Right" to physical
 // LEFT. This mapping is applied below. It is based on documented MediaPipe
-// behavior, not a live empirical check (no webcam in this environment) —
-// flagged for human verification via dev-test/tracking-test.html.
-const SWAP_HANDEDNESS = true;
+// behavior, not a live empirical check (no webcam in this environment).
+// Live check with a webcam (2026-10-28): with the swap on, raising the right
+// hand registered as left, so MediaPipe's labels already match the physical
+// hands here and the swap is off.
+const SWAP_HANDEDNESS = false;
 
 function mapLabelToSide(label) {
   if (label === 'Left') return SWAP_HANDEDNESS ? 'right' : 'left';
@@ -127,8 +129,6 @@ class HandFilterBank {
     this.fistHighAt = -Infinity;
     this.releasedAt = -Infinity;
     this.armedForBurst = false;
-    this.lastPalmOpen = 0;
-    this.lastPalmOpenT = null;
 
     // extended-finger count (chord gesture) — streak-debounced (4 frames).
     this.fingerCountCandidate = 0;
@@ -287,6 +287,9 @@ export class HandTracker {
     this._banks = { left: new HandFilterBank(), right: new HandFilterBank() };
     this._latest = { t: -Infinity, hands: { left: null, right: null } };
     this._freeze = false;
+    // GRID play mode: the left hand writes/erases the step grid (pinch/fist),
+    // so only the right hand may freeze or fire a burst.
+    this._gridMode = false;
 
     this._burstCount = 0;
 
@@ -509,34 +512,31 @@ export class HandTracker {
       bank.fistAbove = false;
     }
 
-    // Raw (unpersisted) fist edge — burst timing needs the release moment
-    // itself, not the debounced freeze state, so <180ms windows are usable.
-    const isFistRaw = fist > ON_T;
-    if (isFistRaw && !bank.wasFist) {
+    // Raw (unpersisted) fist edge for burst timing, with its own looser
+    // thresholds: the quick fist before a snap is rarely as tight as a held
+    // freeze fist.
+    const BURST_ARM_T = 0.6;
+    if (!bank.wasFist && fist > BURST_ARM_T) {
+      bank.wasFist = true;
       bank.fistHighAt = t;
       bank.armedForBurst = true; // a fresh fist engagement arms the next release for burst detection
-    } else if (!isFistRaw && bank.wasFist) {
+    } else if (bank.wasFist && fist < BURST_ARM_T) {
+      bank.wasFist = false;
       bank.releasedAt = t;
     }
-    bank.wasFist = isFistRaw;
 
-    // palm-open velocity (rate of change of the low-passed palmOpen scalar)
-    let openVel = 0;
-    if (bank.lastPalmOpenT !== null) {
-      const dt = Math.max((t - bank.lastPalmOpenT) / 1000, 1e-3);
-      openVel = (palmOpen - bank.lastPalmOpen) / dt;
-    }
-    bank.lastPalmOpen = palmOpen;
-    bank.lastPalmOpenT = t;
-
-    const OPEN_T = 0.6;
-    const OPEN_VEL_T = 2.5; // palmOpen units/sec
+    // "Fast" = the hand is clearly open within BURST_WINDOW_MS of the fist
+    // release. The speed lives in the window itself, which tolerates the lag
+    // of the smoothed palmOpen better than a per-frame velocity threshold.
+    const BURST_WINDOW_MS = 300; // from leaving the fist to open: about a 750 ms snap at most
+    const OPEN_T = 0.55; // palmOpen
+    const OPEN_FIST_T = 0.3; // or fist this low: fingers are fully out
 
     if (
+      (!this._gridMode || bank === this._banks.right) &&
       bank.armedForBurst &&
-      palmOpen > OPEN_T &&
-      openVel > OPEN_VEL_T &&
-      t - bank.releasedAt < 180 &&
+      (palmOpen > OPEN_T || fist < OPEN_FIST_T) &&
+      t - bank.releasedAt < BURST_WINDOW_MS &&
       bank.releasedAt > bank.fistHighAt
     ) {
       this._burstCount++;
@@ -573,7 +573,12 @@ export class HandTracker {
   _updateFreeze() {
     const leftOn = this._banks.left.fistAbove;
     const rightOn = this._banks.right.fistAbove;
-    this._freeze = leftOn || rightOn;
+    this._freeze = this._gridMode ? rightOn : leftOn || rightOn;
+  }
+
+  // GRID mode: freeze and burst come from the right hand only.
+  setGridMode(on) {
+    this._gridMode = !!on;
   }
 
   getState() {
@@ -617,6 +622,7 @@ export class HandTracker {
     }
 
     const rightPinch = hands.right ? hands.right.pinch : 0;
+    const leftPinch = hands.left ? hands.left.pinch : 0;
 
     return {
       t,
@@ -626,6 +632,8 @@ export class HandTracker {
         freeze: this._freeze,
         burstCount: this._burstCount,
         pinch: rightPinch,
+        leftPinch,
+        leftFist: this._banks.left.fistAbove,
         twoHandDistance,
         rightFingerCount: this._banks.right.fingerCountPersisted,
         chordOn: this._banks.right.fingerCountPersisted === 3,

@@ -66,16 +66,19 @@
 <canvas id="beat-timeline"></canvas>
 <video id="cam" playsinline muted></video>
 <div id="hud-status"></div>
+<canvas id="tape-canvas" role="button" tabindex="0" aria-label="OPEN TAPE EDITOR"></canvas>
+<div id="tape-editor" role="region" aria-label="TAPE EDITOR" hidden></div>
 
 <div id="boot">
   <div class="boot-inner">
     <pre id="boot-lines" class="boot-lines"></pre>
+    <p id="boot-hint" class="boot-hint">CLICK OR PRESS ANY KEY TO SKIP</p>
     <div id="boot-gdpr" class="boot-gdpr" hidden>
       <div class="boot-gdpr-title">BEFORE YOU START</div>
       <ul class="boot-gdpr-list">
         <li>Your camera is processed in your browser. The tool is built without any video upload or storage.</li>
         <li>This is a static page, built without cookies, analytics or a server of its own.</li>
-        <li>The page remembers a few of your settings in this browser so it opens the way you left it. The full list is in the <a href="legal/privacy.html">privacy policy</a>.</li>
+        <li>The page remembers a few of your settings in this browser so it opens the way you left it, and in GRID mode it keeps your last tape there. The full list is in the <a href="legal/privacy.html">privacy policy</a>.</li>
         <li>The hand-tracking library and model load from jsDelivr and Google's CDN as standard file requests. The tool sends no video or gesture data with them.</li>
       </ul>
       <div class="btn-row">
@@ -93,36 +96,70 @@
     <p class="tagline">conduct sound with your hands</p>
     <p class="mobile-notice">DESIGNED FOR DESKTOP. MOBILE IS A DEMO UI — full instrument accuracy and performance are not guaranteed on phones.</p>
 
-    <h2>Instructions</h2>
-    <table class="gesture-table">
-      <tr><td>RIGHT HAND X/Y</td><td>playhead position / pitch</td></tr>
-      <tr><td>RIGHT PINCH</td><td>grain size</td></tr>
-      <tr><td>LEFT HAND HEIGHT</td><td>grain density</td></tr>
-      <tr><td>TWO-HAND DISTANCE</td><td>filter + space</td></tr>
-      <tr><td>FIST</td><td>freeze the cloud</td></tr>
-      <tr><td>FAST OPEN PALM</td><td>burst</td></tr>
-      <tr><td>RIGHT 3 FINGERS</td><td>chord (root + fifth)</td></tr>
-      <tr><td>LEFT 3 FINGERS (hold)</td><td>toggle chord ↔ arpeggio</td></tr>
-      <tr><td>LEFT INDEX POINT UP/DOWN</td><td>octave shift</td></tr>
-      <tr><td>[ / ] · shift-click BEAT</td><td>BPM down/up · type exact BPM</td></tr>
-      <tr><td>MEDIUM</td><td>stir the field — currents play a second voice</td></tr>
-    </table>
-
-    <p class="credit dos-link tutorial-link">C:\&gt; FIRST TIME? <a href="#" id="btn-tutorial">RUN TUTORIAL.EXE</a></p>
-
-    <div class="legal-links">
-      <a href="legal/privacy.html">PRIVACY</a>
-      <a href="legal/terms.html">TERMS</a>
-      <a href="legal/license.html">LICENSE</a>
-    </div>
-
     <div id="mode-select">
-      <div id="syscheck-status">SYSTEM CHECK...</div>
-      <div id="syscheck-details"></div>
-      <div class="btn-row">
-        <button id="btn-start-full" class="btn">▸ START — FULL MODE</button>
-        <button id="btn-start-balanced" class="btn">▸ START — BALANCED MODE</button>
-        <button id="btn-start-light" class="btn">▸ START — LIGHT MODE</button>
+      <div class="ws-console">
+        <section class="ws-left">
+          <h2 class="step">CHOOSE HOW TO PLAY</h2>
+          <div class="cards" id="play-select" role="group" aria-label="Play mode">
+            <button id="btn-play-flow" class="card selected" aria-pressed="true">
+              <span class="ck" aria-hidden="true">✓</span>
+              <svg viewBox="0 0 150 84" aria-hidden="true"><path d="M4 18q10-9 20 0t20 0M106 18q10-9 20 0t20 0M4 34q10-9 20 0t20 0M106 34q10-9 20 0t20 0M4 50q10-9 20 0t20 0M106 50q10-9 20 0t20 0"/><path d="M60 76V51L54 43Q52 40 55 39Q58 38 60 41L63 45V22Q63 19 66 19Q69 19 69 22V40V18Q69 15 72 15Q75 15 75 18V40V21Q75 18 78 18Q81 18 81 21V42V26Q81 23 84 23Q87 23 87 26V56Q87 72 76 76Z"/></svg>
+              <span class="t">FLOW</span><span class="d">PLAY THE CURRENTS FREELY</span>
+            </button>
+            <button id="btn-play-grid" class="card" aria-pressed="false">
+              <span class="ck" aria-hidden="true">✓</span>
+              <svg viewBox="0 0 150 84" aria-hidden="true"><path d="M62 52V35L58 30Q56 27 59 26Q62 25 64 28L66 31V12Q66 9 69 9Q72 9 72 12V28V10Q72 7 75 7Q78 7 78 10V28V13Q78 10 81 10Q84 10 84 13V30V17Q84 14 87 14Q90 14 90 17V38Q90 50 80 52Z"/><g><rect x="10" y="62" width="14" height="16"/><rect x="28" y="62" width="14" height="16"/><rect x="46" y="62" width="14" height="16"/><rect x="64" y="62" width="14" height="16"/><rect x="82" y="62" width="14" height="16"/><rect x="100" y="62" width="14" height="16"/><rect x="118" y="62" width="14" height="16"/></g></svg>
+              <span class="t">GRID</span><span class="d">WRITE BARS WITH YOUR HANDS, THEN EDIT THEM</span>
+            </button>
+          </div>
+
+          <h2 class="step">CHOOSE QUALITY</h2>
+          <div class="seg" role="group" aria-label="Quality">
+            <button id="btn-start-full" class="seg-btn" aria-pressed="false">FULL</button>
+            <button id="btn-start-balanced" class="seg-btn" aria-pressed="false">BALANCED</button>
+            <button id="btn-start-light" class="seg-btn" aria-pressed="false">LIGHT</button>
+          </div>
+          <p class="seg-note" id="tier-note"></p>
+
+          <button id="btn-start" class="start-btn">▸ START FLOW</button>
+          <p class="start-note">ASKS FOR YOUR CAMERA · PROCESSED IN YOUR BROWSER</p>
+          <button id="btn-start-skip" class="btn start-skip" hidden>SKIP, JUST PLAY</button>
+
+          <div id="syscheck-status">SYSTEM CHECK...</div>
+          <div id="syscheck-details"></div>
+        </section>
+
+        <section class="ws-right">
+          <div class="tut" id="tut-box">
+            <div class="bar"><span>TUTORIAL.EXE</span><span aria-hidden="true">[■]</span></div>
+            <div class="bd"><p id="tut-text">6 STEPS, HANDS ONLY<span class="blink" aria-hidden="true">█</span></p><button id="btn-tutorial" class="btn">▸ RUN FLOW TUTORIAL</button></div>
+          </div>
+
+          <h2 class="step">GESTURES · <span id="gest-mode">FLOW</span></h2>
+          <table class="gesture-table" data-for="flow">
+            <tr><td>RIGHT HAND X/Y</td><td>playhead position / pitch</td></tr>
+            <tr><td>RIGHT PINCH</td><td>grain size</td></tr>
+            <tr><td>LEFT HAND HEIGHT</td><td>grain density</td></tr>
+            <tr><td>TWO-HAND DISTANCE</td><td>filter + space</td></tr>
+            <tr><td>FIST</td><td>freeze the cloud</td></tr>
+            <tr><td>FAST OPEN PALM</td><td>burst</td></tr>
+            <tr><td>RIGHT 3 FINGERS</td><td>chord (root + fifth)</td></tr>
+            <tr><td>LEFT 3 FINGERS (hold)</td><td>toggle chord ↔ arpeggio</td></tr>
+            <tr><td>LEFT INDEX POINT UP/DOWN</td><td>octave shift</td></tr>
+            <tr><td>[ / ] · shift-click BEAT</td><td>BPM down/up · type exact BPM</td></tr>
+            <tr><td>MEDIUM</td><td>stir the field — currents play a second voice</td></tr>
+          </table>
+          <table class="gesture-table" data-for="grid" hidden>
+            <tr><td>LEFT PINCH (hold)</td><td>write into the bar under the playhead</td></tr>
+            <tr><td>LEFT FIST (hold)</td><td>erase the steps the playhead passes</td></tr>
+            <tr><td>RIGHT HAND</td><td>plays live on top of the tape</td></tr>
+            <tr><td>RIGHT FIST</td><td>freeze the live cloud</td></tr>
+            <tr><td>SPACE · TAP THE TAPE</td><td>pause and edit the bars</td></tr>
+            <tr><td>CTRL/⌘ Z</td><td>undo the last erase or edit</td></tr>
+            <tr><td>ALSO FROM FLOW</td><td>right 3 fingers (chord), left 3 fingers (chord ↔ arpeggio), left index up/down (octave), [ / ] (BPM)</td></tr>
+          </table>
+
+        </section>
       </div>
     </div>
 
@@ -131,18 +168,30 @@
       <button id="btn-retry-camera" class="btn">RETRY</button>
     </div>
 
-    <h2>ARTISTS</h2>
-    <p class="credit artists">
-      SINAIDA KRIVCHENKO — concept and experience design — <a href="https://sinaida.eu">sinaida.eu</a><br />
-      music advisor: Kamil Yegelev (TeleFM) — <a href="https://telefm.bandcamp.com/">telefm.bandcamp.com</a> (Belgrade)
-    </p>
-    <p class="credit artists">
-      AETHER CURRENTS is a live medium that turns algorithmic tools into a dynamic extension of the physical body, translating movement into sonic and visual currents. Designed and directed by Sinaida and built with agentic tools, with Kamil Yegelev (<a href="https://telefm.bandcamp.com/">TeleFM</a>) as music advisor — a shared conviction that AI-era tools do not have to flatten performance into a prompt.
-    </p>
-    <p class="credit dos-link">C:\&gt; <a href="https://youtu.be/fxrrSxvKp9Q" target="_blank" rel="noopener">WATCH DEMO.EXE</a></p>
-
-    <p class="credit">concept and experience design by Sinaida Krivchenko — <a href="https://sinaida.eu">sinaida.eu</a><br />
-      music advisor: Kamil Yegelev (TeleFM) — <a href="https://telefm.bandcamp.com/">telefm.bandcamp.com</a></p>
+    <footer class="ws-foot">
+      <div class="ws-col">
+        <h2>ARTISTS</h2>
+        <p class="credit artists">
+          SINAIDA KRIVCHENKO — concept and experience design — <a href="https://sinaida.eu">sinaida.eu</a><br />
+          music advisor: Kamil Yegelev (TeleFM) — <a href="https://telefm.bandcamp.com/">telefm.bandcamp.com</a> (Belgrade)
+        </p>
+      </div>
+      <div class="ws-col">
+        <h2>ABOUT</h2>
+        <p class="credit artists">
+          AETHER CURRENTS is a live medium that turns algorithmic tools into a dynamic extension of the physical body, translating movement into sonic and visual currents. Designed and directed by Sinaida and built with agentic tools, with Kamil Yegelev (<a href="https://telefm.bandcamp.com/">TeleFM</a>) as music advisor — a shared conviction that AI-era tools do not have to flatten performance into a prompt.
+        </p>
+        <p class="credit dos-link">C:\&gt; <a href="https://youtu.be/fxrrSxvKp9Q" target="_blank" rel="noopener">WATCH DEMO.EXE</a></p>
+      </div>
+      <div class="ws-col">
+        <h2>LEGAL</h2>
+        <div class="legal-links">
+          <a href="legal/privacy.html">PRIVACY</a>
+          <a href="legal/terms.html">TERMS</a>
+          <a href="legal/license.html">LICENSE</a>
+        </div>
+      </div>
+    </footer>
   </div>
 </div>
 
@@ -157,6 +206,20 @@
   <button id="btn-medium" class="btn">▸ MEDIUM</button>
   <button id="btn-midi" class="btn">▸ MIDI</button>
   <button id="btn-declutter" class="btn" title="show/hide controls">[≡]</button>
+</div>
+
+<div id="play-toast" class="play-toast" role="status" hidden>
+  <span id="play-toast-text"></span>
+  <button id="play-toast-undo" class="btn" hidden>↶ UNDO</button>
+</div>
+
+<div id="tape-restore" class="play-toast tape-restore" role="dialog" aria-label="RESTORE LAST TAPE" hidden>
+  <div class="tape-restore-title">RESTORE LAST TAPE?</div>
+  <div id="tape-restore-info" class="tape-restore-info"></div>
+  <div class="btn-row">
+    <button id="btn-tape-restore" class="btn">▸ RESTORE</button>
+    <button id="btn-tape-fresh" class="btn">START A NEW TAPE</button>
+  </div>
 </div>
 
 <div id="perf-toast" class="toast-panel" style="display:none">

@@ -8,10 +8,10 @@
 import { perfBus } from './perf-bus.js';
 import { CC_MAP, normalizeCC, CC_THROTTLE_MS } from './cc-map.js';
 
-const PPQ = 480; // ticks per quarter note
+export const PPQ = 480; // ticks per quarter note
 
 // ---- variable-length quantity ---------------------------------------------
-function writeVLQ(value) {
+export function writeVLQ(value) {
   let buffer = value & 0x7f;
   const bytes = [];
   // Build from the low 7 bits up, then reverse — standard VLQ construction.
@@ -28,16 +28,16 @@ function writeVLQ(value) {
   return bytes;
 }
 
-function u32be(n) {
+export function u32be(n) {
   return [(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff];
 }
-function u16be(n) {
+export function u16be(n) {
   return [(n >>> 8) & 0xff, n & 0xff];
 }
 
 // Builds one MTrk chunk from a list of { tick, bytes: number[] } events,
 // already sorted ascending by tick. Appends End-of-Track.
-function buildTrack(events) {
+export function buildTrack(events) {
   const body = [];
   let lastTick = 0;
   for (const ev of events) {
@@ -56,7 +56,7 @@ function buildTrack(events) {
   ];
 }
 
-function buildTempoTrack(bpm) {
+export function buildTempoTrack(bpm) {
   const usPerQuarter = Math.round(60000000 / Math.max(1, bpm));
   const events = [
     {
@@ -134,7 +134,21 @@ export class PerfRecorder {
       this._push(this._now(), [0x91, note, 100]); // ch2 idx1
     };
 
+    // Grid notes: same bytes as live-out (CC 22/23/24 then note-on, ch3).
+    const onGridNote = ({ note, step }) => {
+      if (!step) return;
+      const n = Math.max(0, Math.min(127, note | 0));
+      const ms = this._now();
+      const cc7 = (v) => Math.max(0, Math.min(127, Math.round(v)));
+      this._push(ms, [0xb2, 22, cc7(((step.grainSize - 0.02) / 0.48) * 127)]);
+      this._push(ms, [0xb2, 23, cc7(((step.density - 1) / 79) * 127)]);
+      this._push(ms, [0xb2, 24, cc7((Math.log(step.filterCutoff / 100) / Math.log(180)) * 127)]);
+      this._push(ms, [0x92, n, 100]);
+      this._push(ms + 50, [0x82, n, 0]);
+    };
+
     this._unsubs = [
+      perfBus.on('gridNote', onGridNote),
       perfBus.on('cc', onCc),
       perfBus.on('kick', onKick),
       perfBus.on('hat', onHat),

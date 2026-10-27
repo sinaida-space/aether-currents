@@ -2,28 +2,20 @@
 
 ![AETHER CURRENTS](gh_ac_cover.png)
 
-**▸ [LIVE — full experience](https://sinaida-space.github.io/aether-currents/)**
+**▸ [LIVE: full experience](https://aether-currents.sinaida.eu/)**
 
-Conduct sound with your hands. A browser-based instrument: on-device hand
-tracking drives granular audio synthesis and a live visual layer.
-Static site, no build step, no framework — vanilla JS/CSS with ES modules.
+Conduct sound with your hands. A browser-based instrument: on-device hand tracking drives granular audio synthesis and a live visual layer. It is a static site with no build step and no framework, written in vanilla JS/CSS with ES modules.
 
-Concept and experience design by Sinaida Krivchenko, a new media artist based in Prague:
-the interaction, the system specification and testing with players.
-Built with agentic tools under her direction. Kamil Yegelev
-(TeleFM, Belgrade) is the music advisor; his hands-on feedback shaped the
-instrument's sound and gesture language.
+Concept and experience design by Sinaida Krivchenko, a new media artist based in Prague: the interaction, the system specification and testing with players. Built with agentic tools under her direction. Kamil Yegelev (TeleFM, Belgrade) is the music advisor; his hands-on feedback shaped the instrument's sound and gesture language.
 
 ## Artists
 
-- **Sinaida Krivchenko** — new media artist, Prague — [sinaida.eu](https://sinaida.eu) — concept and experience design.
-- music advisor: **Kamil Yegelev (TeleFM)**, Belgrade — [telefm.bandcamp.com](https://telefm.bandcamp.com/).
+- Sinaida Krivchenko, new media artist in Prague: concept and experience design · [sinaida.eu](https://sinaida.eu)
+- Kamil Yegelev (TeleFM), Belgrade: music advisor · [telefm.bandcamp.com](https://telefm.bandcamp.com/)
 
 ## Quality tiers
 
-Aether Currents auto-detects device capability on load (`syscheck.js`) and
-applies the best-fitting tier, with a sticky user-override if you switch
-manually:
+AETHER CURRENTS checks what the device can do on load (`syscheck.js`) and applies the best-fitting tier; a tier you pick yourself stays in place:
 
 ```
 FULL ....... full-resolution field sim, tracking capped at 60Hz
@@ -31,15 +23,11 @@ BALANCED ... 192-particle sim, tracking capped at 45Hz / 640px
 LIGHT ...... minimal sim, tracking capped at 30Hz
 ```
 
-A perf watchdog steps down one tier at a time (never straight to LIGHT) if
-frame time degrades, aiming to keep hand-following latency low on the current
-device.
+A perf watchdog steps down one tier at a time (never straight to LIGHT) if frame time degrades, aiming to keep hand-following latency low on the current device.
 
 ## Scriabin color mapping
 
-Each of the 12 chromatic notes played tints the visual field with its
-color after Alexander Scriabin's note-to-color correspondences,
-rather than an arbitrary palette:
+Each of the 12 chromatic notes played tints the visual field with its color after Alexander Scriabin's note-to-color correspondences, rather than an arbitrary palette:
 
 ```
 C  ...... red        F  ...... deep red
@@ -51,9 +39,7 @@ E  ...... pearly moonlit A  ... green
                        B  ...... pearly blue
 ```
 
-The active note's color is derived from root + scale position each frame
-and smoothed over ~100ms so octave and band changes glide rather than flash;
-spectral centroid and level modulate brightness/saturation around that hue.
+The active note's color is derived from root + scale position each frame and smoothed over ~100ms so octave and band changes glide rather than flash; spectral centroid and level modulate brightness/saturation around that hue.
 
 ## Gestures
 
@@ -73,18 +59,11 @@ MEDIUM .................... stir the field: currents play a second voice
 
 ## Play modes
 
-The start screen offers two ways to play. FLOW is the open instrument: your
-hands conduct the currents freely. GRID turns the instrument into a small tape
-recorder for bars of 16 steps.
+The start screen offers two ways to play. FLOW is the open instrument: your hands conduct the currents freely. GRID turns the instrument into a small tape recorder for bars of 16 steps.
 
-Each mode has a short tutorial with live feedback from the camera (FLOW: six
-steps, GRID: five). On a first visit the start button runs it; once finished,
-the page remembers it and the tutorial moves to the `TUTORIAL.EXE` box.
+Each mode has a short tutorial with live feedback from the camera (FLOW: six steps, GRID: five). On a first visit the start button runs it; once finished, the page remembers it and the tutorial moves to the `TUTORIAL.EXE` box.
 
-In GRID the beat runs and every bar you play is kept on a tape at the bottom of
-the screen, with a bar counter. Each step keeps a note from the current scale
-plus the grain size, density and filter your hands held at that moment. The
-tape plays through a second voice, so your hands keep playing live on top.
+In GRID the beat runs and every bar you play is kept on a tape at the bottom of the screen, with a bar counter. Each step keeps a note from the current scale plus the grain size, density and filter your hands held at that moment. The tape plays through a second voice, so your hands keep playing live on top.
 
 ```
 LEFT PINCH (hold) .... write: the step under the playhead takes the right hand's pose
@@ -96,24 +75,13 @@ CTRL/CMD Z ........... undo the last erase run or edit (SHIFT redoes)
 
 Chords, the octave shift and the `[ / ]` BPM keys work in GRID as in FLOW.
 
-In EDIT the tape stops and opens as a note editor. Scroll to any bar
-with a mouse, trackpad, touch or the arrow keys, then add, move or delete
-notes. Drag the red playhead to scrub; hold a note to stutter it.
-Keyboard: Tab into the notes, move with the arrows, press Enter to add.
-Mark a range of bars as a loop, play again from any bar, or export the
-bars as a `.mid` file for a DAW, with or without the beat. The tape is
-saved in this browser; the next GRID start offers to restore it.
+In EDIT the tape stops and opens as a note editor. Scroll to any bar with a mouse, trackpad, touch or the arrow keys, then add, move or delete notes. Drag the red playhead to scrub, or hold a note to make it stutter. Keyboard: Tab into the notes, move with the arrows, press Enter to add. Mark a range of bars as a loop, play again from any bar, or export the bars as a `.mid` file for a DAW, with or without the beat. The tape is saved in this browser; the next GRID start offers to restore it.
 
 ## MIDI out
 
-Gesture and beat events stream live as MIDI CC/notes to a Web MIDI output
-port — `▸ MIDI` in the control row, or the `M` key. Designed to work as
-a live controller for a DAW, TouchDesigner or hardware. See
-[docs/midi.md](docs/midi.md) for the full CC table and DAW setup.
+Gesture and beat events stream live as MIDI CC/notes to a Web MIDI output port. Open it with `▸ MIDI` in the control row or the `M` key. Designed to work as a live controller for a DAW, TouchDesigner or hardware. See [docs/midi.md](docs/midi.md) for the full CC table and DAW setup.
 
-Live out and the GRID `.mid` export are separate: live out streams while you
-play and needs a MIDI port; the export writes the tape to a file and needs
-none.
+Live out and the GRID `.mid` export are separate: live out streams while you play and needs a MIDI port; the export writes the tape to a file and needs none.
 
 ## Running locally
 
@@ -142,8 +110,7 @@ legal/                   privacy, terms, license
 
 ## Privacy
 
-Built without cookies, analytics or a server of its own. Camera frames are processed on your device.
-See [legal/privacy.html](legal/privacy.html).
+Built without cookies, analytics or a server of its own. Camera frames are processed on your device. See [legal/privacy.html](legal/privacy.html).
 
 ## Support & handoff
 
@@ -161,16 +128,10 @@ Sinaida comes up with the idea, the concept and the way to make it into a system
 
 ## License
 
-Code: AGPL 3.0, see [LICENSE](LICENSE) and [NOTICE](NOTICE). Free to use,
-study, modify and share. Run a modified version, including as a hosted
-service, and you publish your source under the same terms.
-Recordings you make with the tool: CC BY 4.0 with mandatory attribution
-(`AETHER CURRENTS — concept and experience design by Sinaida Krivchenko · music advisor: Kamil Yegelev (TeleFM) — sinaida.eu`, linking [telefm.bandcamp.com](https://telefm.bandcamp.com/) where possible),
-see [LICENSE-CONTENT](LICENSE-CONTENT) and [legal/license.html](legal/license.html).
-Third-party code: [THIRD-PARTY.md](THIRD-PARTY.md).
+Code: AGPL 3.0, see [LICENSE](LICENSE) and [NOTICE](NOTICE). Free to use, study, modify and share. Run a modified version, including as a hosted service, and you publish your source under the same terms. Recordings you make with the tool: CC BY 4.0 with mandatory attribution (`AETHER CURRENTS — concept and experience design by Sinaida Krivchenko · music advisor: Kamil Yegelev (TeleFM) — sinaida.eu`, linking [telefm.bandcamp.com](https://telefm.bandcamp.com/) where possible), see [LICENSE-CONTENT](LICENSE-CONTENT) and [legal/license.html](legal/license.html). Third-party code is listed in [THIRD-PARTY.md](THIRD-PARTY.md).
 
-concept and experience design by Sinaida Krivchenko — [sinaida.eu](https://sinaida.eu)  
-music advisor: Kamil Yegelev (TeleFM) — [telefm.bandcamp.com](https://telefm.bandcamp.com/)
+concept and experience design by Sinaida Krivchenko · [sinaida.eu](https://sinaida.eu)  
+music advisor: Kamil Yegelev (TeleFM) · [telefm.bandcamp.com](https://telefm.bandcamp.com/)
 
 This repo is a production mirror.
 

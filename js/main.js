@@ -440,7 +440,7 @@ function currentFullscreenElement() {
 }
 
 function updateFullscreenLabel() {
-  btnFullscreen.textContent = currentFullscreenElement() ? '⛶ EXIT' : '⛶ FULLSCREEN';
+  btnFullscreen.textContent = currentFullscreenElement() ? 'EXIT' : 'FULLSCREEN';
 }
 
 function requestFullscreenOn(el) {

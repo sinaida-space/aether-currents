@@ -17,7 +17,7 @@
   ],
   "texts": ["legal/privacy.html"],
   "network": {
-    "note": "Static files only; hand-tracking model and wasm loaded from these hosts.",
-    "hosts": ["cdn.jsdelivr.net", "storage.googleapis.com"]
+    "note": "Static files only; hand-tracking library, wasm and model are served from js/vendor/mediapipe/.",
+    "hosts": []
   }
 }

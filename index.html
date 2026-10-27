@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' blob: 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob:; connect-src 'self' https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/ https://storage.googleapis.com/mediapipe-models/hand_landmarker/; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' blob: 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<title>AETHER CURRENTS — conduct sound with your hands</title>
+<title>AETHER CURRENTS · conduct sound with your hands</title>
 <meta name="description" content="Conduct sound with your hands. A browser-based instrument: on-device hand tracking drives granular audio synthesis and a live visual layer. No install, no server, no accounts." />
 <meta name="robots" content="index, follow" />
 <link rel="canonical" href="https://aether-currents.sinaida.eu/" />
@@ -41,7 +41,7 @@
   "@type": "WebApplication",
   "name": "AETHER CURRENTS",
   "url": "https://aether-currents.sinaida.eu/",
-  "description": "A browser-based instrument that reads hand gesture through the camera, on-device, and turns it into granular audio synthesis and live visuals. No install, no MIDI controller — music at your fingertips.",
+  "description": "A browser-based instrument that reads hand gesture through the camera, on-device, and turns it into granular audio synthesis and live visuals. No install, no MIDI controller: music at your fingertips.",
   "applicationCategory": "MultimediaApplication",
   "operatingSystem": "Any (modern desktop browser with camera access)",
   "browserRequirements": "Requires JavaScript and camera access",
@@ -79,7 +79,7 @@
         <li>Your camera is processed in your browser. The tool is built without any video upload or storage.</li>
         <li>This is a static page, built without cookies, analytics or a server of its own.</li>
         <li>The page remembers a few of your settings in this browser so it opens the way you left it, and in GRID mode it keeps your last tape there. The full list is in the <a href="legal/privacy.html">privacy policy</a>.</li>
-        <li>The hand-tracking library and model load from jsDelivr and Google's CDN as standard file requests. The tool sends no video or gesture data with them.</li>
+        <li>The hand-tracking library and model load from this site, so the page asks no other server for anything.</li>
       </ul>
       <div class="btn-row">
         <button id="btn-boot-accept" class="btn boot-accept">[ ACCEPT ]</button>
@@ -197,7 +197,7 @@
 
 <div id="ui-bar">
   <button id="btn-home" class="btn">◂ MAIN SCREEN</button>
-  <button id="btn-fullscreen" class="btn">⛶ FULLSCREEN</button>
+  <button id="btn-fullscreen" class="btn">FULLSCREEN</button>
   <button id="btn-record" class="btn">● RECORD</button>
   <button id="btn-samples" class="btn">SAMPLES</button>
   <button id="btn-bg" class="btn">BG: VOID</button>
@@ -249,7 +249,7 @@
   <div class="dos-panel-note">
     Move your hands through the frame to stir the field. Density and direction of your gestures shape where the current flows and what it triggers — there's no fixed mapping to learn, just push and watch it respond.
   </div>
-  <div class="dos-panel-note">It can behave unpredictably — that's the point. Turn it off any time from the same button.</div>
+  <div class="dos-panel-note">It can behave unpredictably, and that is the point. Turn it off any time from the same button.</div>
   <div class="btn-row">
     <button id="btn-medium-ok" class="btn">▸ OK, STIR THE FIELD</button>
   </div>
@@ -258,8 +258,8 @@
 <div id="sample-menu" class="dos-panel" style="display:none">
   <div class="dos-panel-title">SELECT SOURCE</div>
   <ul id="sample-list"></ul>
-  <div id="osd-row" class="dos-panel-note" style="cursor:pointer">VHS OSD [T] : <span id="osd-state">ON</span></div>
-  <div class="dos-panel-note dos-panel-note-warn">⚠ RECORD MIC: only record your own voice, sounds, or melodies you hold clear rights to. no file upload — every sample's rights stay unambiguous.</div>
+  <div id="osd-row" class="dos-panel-note" style="cursor:pointer">VHS OSD [T]: <span id="osd-state">ON</span></div>
+  <div class="dos-panel-note dos-panel-note-warn">RECORD MIC: only record your own voice, sounds, or melodies you hold clear rights to. There is no file upload, so every sample's rights stay unambiguous.</div>
   <button id="btn-close-samples" class="btn">[ ESC ] CLOSE</button>
 </div>
 
@@ -267,7 +267,7 @@
   <div class="dos-panel-title">MIDI OUT</div>
   <div id="midi-unsupported" class="dos-panel-note dos-panel-note-warn" style="display:none">WEB MIDI NOT SUPPORTED IN THIS BROWSER</div>
   <ul id="midi-port-list"></ul>
-  <div class="dos-panel-note">gesture &amp; beat events stream live as MIDI CC/notes — see docs/midi.md for the CC table and DAW setup.</div>
+  <div class="dos-panel-note">gesture &amp; beat events stream live as MIDI CC/notes. See docs/midi.md for the CC table and DAW setup.</div>
   <button id="btn-close-midi" class="btn">[ ESC ] CLOSE</button>
 </div>
 
@@ -287,7 +287,7 @@
 <div id="record-export" class="dos-panel" style="display:none">
   <div class="dos-panel-title">RECORDING SAVED</div>
   <div id="export-video-failed" class="dos-panel-note" style="display:none">
-    ⚠ VIDEO CAPTURE FAILED IN THIS BROWSER — ONLY AUDIO (WAV) WAS SAVED.<br />
+    VIDEO CAPTURE FAILED IN THIS BROWSER: ONLY AUDIO (WAV) WAS SAVED.<br />
     ON iOS, EVERY BROWSER SHARES THE SAME ENGINE, SO SWITCHING BROWSERS WON'T HELP — TRY A DESKTOP OR ANDROID CHROME INSTEAD, OR SCREEN-RECORD.
   </div>
   <div class="btn-row">

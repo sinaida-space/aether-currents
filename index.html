@@ -61,9 +61,9 @@
 </head>
 <body>
 
-<canvas id="gl-canvas"></canvas>
-<canvas id="hud-canvas"></canvas>
-<canvas id="beat-timeline"></canvas>
+<canvas id="gl-canvas" role="img" aria-label="Visuals that follow your hands and the sound"></canvas>
+<canvas id="hud-canvas" aria-hidden="true"></canvas>
+<canvas id="beat-timeline" aria-hidden="true"></canvas>
 <video id="cam" playsinline muted></video>
 <div id="hud-status"></div>
 <canvas id="tape-canvas" role="button" tabindex="0" aria-label="OPEN TAPE EDITOR"></canvas>
@@ -205,7 +205,7 @@
   <button id="btn-scale" class="btn">A MIN PENT</button>
   <button id="btn-medium" class="btn">▸ MEDIUM</button>
   <button id="btn-midi" class="btn">▸ MIDI</button>
-  <button id="btn-declutter" class="btn" title="show/hide controls">[≡]</button>
+  <button id="btn-declutter" class="btn" title="show/hide controls" aria-label="Show or hide controls">[≡]</button>
 </div>
 
 <div id="play-toast" class="play-toast" role="status" hidden>

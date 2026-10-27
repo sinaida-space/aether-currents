@@ -579,7 +579,10 @@ export class Renderer {
   }
 
   frame(dt, state) {
-    dt = Math.min(dt || 0.016, 0.033);
+    // The clamp keeps the simulation stable after a stall; fps reads the
+    // unclamped interval so the HUD and the perf watchdog see real slowdowns.
+    const frameDt = dt || 0.016;
+    dt = Math.min(frameDt, 0.033);
     this.time += dt;
 
     // Context lost: skip every GL call (they'd be no-ops at best, and some
@@ -603,7 +606,7 @@ export class Renderer {
     const gl = this.gl;
 
     // fps EMA on true interval
-    const inst = 1 / dt;
+    const inst = 1 / frameDt;
     this._fpsEMA = this._fpsEMA ? this._fpsEMA * 0.9 + inst * 0.1 : inst;
     this.fps = this._fpsEMA;
 

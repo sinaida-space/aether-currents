@@ -111,8 +111,8 @@ async function runProbeAndShowModes() {
 
   // Highlight the tier that's actually active (the sticky user choice when
   // one exists, otherwise the freshly-probed recommendation) — not always
-  // the probe's recommendation, which review #51 (finding 4) found could
-  // point at the wrong button once a sticky override was in effect.
+  // the probe's recommendation, which would point at the wrong button once a
+  // sticky override is in effect.
   const activeTier = sticky ? getStoredMode() || probe.recommended : probe.recommended;
   recommendedTier = probe.recommended;
   for (const b of Object.values(TIER_BUTTON)) b.removeAttribute('data-recommended');
@@ -421,7 +421,7 @@ document.getElementById('btn-start-skip')?.addEventListener('click', () => start
 // Respects the currently auto-applied/sticky tier (ac.mode) instead of
 // hardcoding FULL — the tutorial link bypasses mode-select entirely, so it
 // must not silently defeat the tier system for exactly the machines that
-// need it (review #51, finding 1).
+// need it.
 btnTutorial.addEventListener('click', (e) => {
   e.preventDefault();
   requestTutorial(); // runs the tutorial of the selected mode (FLOW or GRID)
@@ -726,8 +726,7 @@ const MIC_LABEL = '▸ RECORD MIC (4S)';
 
 // Keep the on-screen attribution line and the "COPY CREDIT LINE" clipboard
 // write byte-for-byte identical — the markup's static text is a matching
-// fallback only in case JS fails to run, never the source of truth (review
-// #51, finding 3).
+// fallback only in case JS fails to run, never the source of truth.
 const creditLineEl = document.getElementById('credit-line');
 if (creditLineEl) creditLineEl.textContent = CREDIT_LINE;
 
